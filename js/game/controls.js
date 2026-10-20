@@ -20,6 +20,7 @@ const PAD_EDGES = [[BTN.B, 'respawn'], [BTN.Y, 'restart'], [BTN.BACK, 'restart']
 const PAD_EDGES_TAS = [[BTN.B, 'respawn'], [BTN.Y, 'tasRewind'], [BTN.BACK, 'restart'], [BTN.RB, 'cameraCycle'], [BTN.START, 'pause'],
     [BTN.LB, 'tasMark'], [BTN.UP, 'tasNext'], [BTN.DOWN, 'tasPrev']];
 const NAV_REPEAT_DELAY = 380, NAV_REPEAT = 130;
+const TAP_WINDOW_MS = 100;   // input() calls further apart than this mean ticks were not running
 
 export class Controls {
     constructor(settings) {
@@ -30,6 +31,10 @@ export class Controls {
         this.tas = false;
         this.edges = new Set();           // actions pressed since last consumed
         this.touch = { gas: false, brake: false, left: false, right: false };
+        // Hold controls pressed since the last tick read them: a tap shorter than a
+        // frame (pressed and released between two ticks) still drives one tick.
+        this.taps = { gas: false, brake: false, left: false, right: false };
+        this._lastInput = -Infinity;
         this.touchPointers = new Map();   // pointerId -> action
         this.pad = { connected: false, steer: 0, gas: false, brake: false, left: false, right: false, id: '' };
         this._padPrev = [];
@@ -99,6 +104,7 @@ export class Controls {
     setActive(on) {
         this.active = !!on;
         this.edges.clear();
+        this._clearTaps();
         this._updateTouchVisibility();
     }
 
@@ -130,16 +136,27 @@ export class Controls {
      * the respawn edge into `respawn`.
      */
     input(out = {}) {
-        const kl = this._keyDown('left') || this.touch.left || this.pad.left;
-        const kr = this._keyDown('right') || this.touch.right || this.pad.right;
+        // Taps only count while ticks keep reading input: one left over from the
+        // countdown or a pause must not reach the first tick after it.
+        const now = performance.now();
+        const t = this.taps, live = now - this._lastInput < TAP_WINDOW_MS;
+        this._lastInput = now;
+        const kl = this._keyDown('left') || this.touch.left || this.pad.left || (live && t.left);
+        const kr = this._keyDown('right') || this.touch.right || this.pad.right || (live && t.right);
         let steer = 0;
         if (kl || kr) steer = (kr ? STEER_MAX : 0) - (kl ? STEER_MAX : 0);
         else steer = this.pad.steer;
         out.steer = clampSteer(steer);
-        out.gas = this._keyDown('gas') || this.touch.gas || this.pad.gas;
-        out.brake = this._keyDown('brake') || this.touch.brake || this.pad.brake;
+        out.gas = this._keyDown('gas') || this.touch.gas || this.pad.gas || (live && t.gas);
+        out.brake = this._keyDown('brake') || this.touch.brake || this.pad.brake || (live && t.brake);
         out.respawn = this.pressed('respawn');
+        this._clearTaps();
         return out;
+    }
+
+    _clearTaps() {
+        const t = this.taps;
+        t.gas = t.brake = t.left = t.right = false;
     }
 
     _keyDown(action) {
@@ -156,6 +173,7 @@ export class Controls {
         this._setDevice('keyboard');
         if (!this.byCode.has(e.code)) return;
         this.codes.add(e.code);
+        if (!e.repeat) for (const a of this.byCode.get(e.code)) if (Object.hasOwn(this.taps, a)) this.taps[a] = true;
         const edges = (this.tas ? this._edgeTas : this._edgeRace).get(e.code);
         if (edges && !e.repeat) for (const a of edges) this.edges.add(a);
         // Only in play: menus keep arrows/Enter/Backspace for navigation and text.
@@ -171,6 +189,7 @@ export class Controls {
         // Keys released while the window was in the background never send keyup.
         this.codes.clear();
         for (const k of Object.keys(this.touch)) this.touch[k] = false;
+        this._clearTaps();
     }
 
     _onPointer(e) {
@@ -312,7 +331,7 @@ export class Controls {
             } catch (err) { /* ignore */ }
             this.touchPointers.set(e.pointerId, action);
             b.classList.add('down');
-            if (HOLD.includes(action)) this.touch[action] = true;
+            if (HOLD.includes(action)) this.touch[action] = this.taps[action] = true;
             else this.edges.add(action);
         });
         const release = (e) => {

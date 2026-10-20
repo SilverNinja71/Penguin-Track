@@ -130,6 +130,25 @@ test('controls: keyboard to Input, edges fire once, typing is ignored', () => {
     assert.equal(m.prevented, false, 'menus keep their arrow keys');
 });
 
+test('controls: a tap shorter than a frame still drives one tick, never a stale one', () => {
+    const c = new Controls(defaultSettings());
+    const key = (type, code) => (type === 'down' ? c._onKeyDown : c._onKeyUp).call(c, { code, target: null, repeat: false, metaKey: false, ctrlKey: false, altKey: false, preventDefault() {} });
+    c.setActive(true);
+    c.input();                         // ticks are running
+    key('down', 'ArrowLeft');
+    key('up', 'ArrowLeft');            // released before the next tick
+    assert.equal(c.input().steer, -STEER_MAX, 'the tap reaches the next tick');
+    assert.equal(c.input().steer, 0, 'and only that one');
+    key('down', 'ArrowUp');
+    key('up', 'ArrowUp');
+    c._lastInput = -Infinity;          // no tick read input for a while (countdown, pause)
+    assert.equal(c.input().gas, false, 'a tap from before the ticks resumed is dropped');
+    key('down', 'ArrowDown');
+    key('up', 'ArrowDown');
+    c.setActive(true);
+    assert.equal(c.input().brake, false, 'switching screens clears taps');
+});
+
 test('controls: gamepad stick with dead zone and sensitivity, triggers, edges', () => {
     const s = defaultSettings();
     s.padDeadzone = 0.2;
