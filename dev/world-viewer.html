@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Penguintrack World Viewer</title>
+<style>
+    :root { --bg: #0a1830; --panel: rgba(12, 30, 60, 0.85); --text: #eef6ff; --muted: #9db8d9; --accent: #7fdcff; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; overflow: hidden; }
+    canvas { display: block; }
+    #panel { position: absolute; top: 8px; left: 8px; background: var(--panel); padding: 8px 10px; border-radius: 10px; max-width: 360px; }
+    #panel h1 { font-size: 14px; margin: 0 0 4px; color: var(--accent); }
+    #panel select, #panel label { margin-right: 6px; }
+    #stats { white-space: pre-wrap; color: var(--muted); margin-top: 6px; }
+    .legend span { display: inline-block; width: 10px; height: 10px; margin: 0 3px 0 8px; vertical-align: middle; border-radius: 2px; }
+    .err { color: #ff6b81; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="panel">
+    <h1>World viewer (dev)</h1>
+    <div>
+        <select id="track"></select>
+        <select id="view"><option value="iso">iso</option><option value="top">top</option></select>
+        <label><input type="checkbox" id="wire"> wire</label>
+        <label><input type="checkbox" id="render"> render mats</label>
+    </div>
+    <div class="legend">
+        <span style="background:#e8f0fa"></span>snow<span style="background:#d8b98a"></span>powder<span style="background:#6fd0ff"></span>ice<span style="background:#7d8ea6"></span>wall<span style="background:#ff4fd8"></span>route<span style="background:#ffd54a"></span>gap
+    </div>
+    <div id="stats"></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { getSamples } from '../js/core/samples.js';
+import { buildWorld, normalizeTrack } from '../js/core/track.js';
+import { BLOCKS } from '../js/core/blocks.js';
+import { decodeTrack } from '../js/core/codec.js';
+import { SURFACE_IDS } from '../js/core/constants.js';
+
+// Query: ?track=S01 | ?block=Loop&s=ice&r=1&y=2 | ?code=PT1.… ; view=top|iso ; yaw, pitch, dist, focus=x,y,z ; wire=1 ; render=1
+const params = new URLSearchParams(location.search);
+const samples = getSamples();
+
+const SURF_COLORS = { snow: 0xe8f0fa, powder: 0xd8b98a, ice: 0x6fd0ff, ground: 0xf4f8ff, wall: 0x7d8ea6 };
+const MAT_COLORS = {
+    road_snow: 0xe8f0fa, road_powder: 0xd8b98a, road_ice: 0x6fd0ff, platform_snow: 0xdfe9f5, platform_powder: 0xcaa978, platform_ice: 0x86dcff,
+    border: 0xbfd0e6, wall: 0x6d7f99, roof_ice: 0x9fe6ff, line_start: 0x6bffb0, line_finish: 0x222222, line_checkpoint: 0x5aa8ff,
+    pad_turbo: 0xffb000, pad_turbo2: 0xff5d00, pad_noEngine: 0x5aa8ff, pad_noSteer: 0x9b6bff, pad_noBrake: 0xff6b81,
+    pad_slowmo: 0xb8f1ff, pad_cruise: 0x6bffb0, pad_fragile: 0xd7e3ef, pad_reset: 0x63ff63,
+};
+const TRIGGER_COLORS = { start: 0x6bffb0, finish: 0xff4f4f, startfinish: 0xffa64f, checkpoint: 0x4fa3ff, effect: 0xffd54a };
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e2340);
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.5, 20000);
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x334466, 1.4));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(0.5, 1, 0.3);
+scene.add(sun);
+
+let content = null;
+let world = null;
+const cam = { target: new THREE.Vector3(), yaw: 0.8, pitch: 0.6, dist: 300 };
+
+function trackFromParams() {
+    if (params.get('code')) {
+        try {
+            return normalizeTrack(decodeTrack(params.get('code')));
+        } catch (e) {
+            console.error(e.message);
+        }
+    }
+    const blockId = params.get('block');
+    if (blockId && BLOCKS[blockId]) {
+        return normalizeTrack({
+            id: 'block', name: `${blockId} (${BLOCKS[blockId].name})`,
+            blocks: [{ b: blockId, x: 2, y: +(params.get('y') || 0), z: 2, r: +(params.get('r') || 0), s: params.get('s') || undefined }],
+        });
+    }
+    return samples.find((t) => t.id === params.get('track')) || samples[0];
+}
+
+function surfaceGeometry(w) {
+    const col = w.collision;
+    const n = col.triCount;
+    const pos = new Float32Array(n * 9), color = new Float32Array(n * 9);
+    const c = new THREE.Color();
+    for (let i = 0; i < n * 9; i++) pos[i] = col.positions[i];
+    for (let i = 0; i < n; i++) {
+        c.setHex(SURF_COLORS[SURFACE_IDS[col.surfaces[i]]]);
+        for (let k = 0; k < 3; k++) color.set([c.r, c.g, c.b], i * 9 + k * 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(color, 3));
+    g.computeVertexNormals();
+    return g;
+}
+
+function build(track) {
+    if (content) {
+        scene.remove(content);
+        content.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    }
+    const t0 = performance.now();
+    world = buildWorld(track, { route: track.id !== 'block' });
+    const ms = performance.now() - t0;
+    content = new THREE.Group();
+    const wire = document.getElementById('wire').checked;
+
+    if (document.getElementById('render').checked) {
+        for (const m of world.render.meshes) {
+            if (m.material === 'ground') continue;
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.BufferAttribute(m.positions, 3));
+            g.setAttribute('normal', new THREE.BufferAttribute(m.normals, 3));
+            g.setIndex(new THREE.BufferAttribute(m.indices, 1));
+            content.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: MAT_COLORS[m.material] ?? 0xff00ff, wireframe: wire, transparent: m.material === 'roof_ice', opacity: m.material === 'roof_ice' ? 0.45 : 1 })));
+        }
+    } else {
+        const g = surfaceGeometry(world);
+        content.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, wireframe: wire, side: THREE.DoubleSide })));
+        if (!wire) {
+            const edges = new THREE.LineSegments(new THREE.WireframeGeometry(g), new THREE.LineBasicMaterial({ color: 0x0b1a33, transparent: true, opacity: 0.18 }));
+            content.add(edges);
+        }
+    }
+
+    // Ground slab (translucent).
+    const gs = world.mapSize;
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(gs[0], gs[2]), new THREE.MeshLambertMaterial({ color: 0xf4f8ff, transparent: true, opacity: 0.35 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(gs[0] / 2, world.groundY - 0.01, gs[2] / 2);
+    content.add(ground);
+    const grid = new THREE.GridHelper(gs[0], 48, 0x5a7aa8, 0x2b4670);
+    grid.position.set(gs[0] / 2, world.groundY, gs[2] / 2);
+    content.add(grid);
+
+    for (const t of world.triggers) {
+        const size = [t.max[0] - t.min[0], t.max[1] - t.min[1], t.max[2] - t.min[2]];
+        const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(...size)), new THREE.LineBasicMaterial({ color: TRIGGER_COLORS[t.type] }));
+        box.position.set(...t.center);
+        content.add(box);
+    }
+
+    if (world.route) {
+        const r = world.route;
+        const pts = new Float32Array(r.count * 3), cols = new Float32Array(r.count * 3);
+        const c = new THREE.Color();
+        for (let i = 0; i < r.count; i++) {
+            pts[i * 3] = r.points[i * 3]; pts[i * 3 + 1] = r.points[i * 3 + 1] + 0.3; pts[i * 3 + 2] = r.points[i * 3 + 2];
+            c.setHex(r.gap[i] ? 0xffd54a : 0xff4fd8);
+            cols.set([c.r, c.g, c.b], i * 3);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+        g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        content.add(new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true })));
+        const dot = new THREE.SphereGeometry(1.2, 10, 8);
+        for (const cp of r.checkpoints) {
+            const p = r.pointAt(cp.s).point;
+            const m = new THREE.Mesh(dot, new THREE.MeshBasicMaterial({ color: 0x4fa3ff }));
+            m.position.set(p[0], p[1] + 1.5, p[2]);
+            content.add(m);
+        }
+    }
+
+    for (const p of world.render.props) {
+        if (p.kind === 'pillar') {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(p.size, p.height, p.size), new THREE.MeshLambertMaterial({ color: 0x9aa9bd }));
+            m.position.set(p.pos[0], p.pos[1] + p.height / 2, p.pos[2]);
+            content.add(m);
+        } else if (p.kind === 'gate') {
+            const grp = new THREE.Group();
+            const mat = new THREE.MeshLambertMaterial({ color: TRIGGER_COLORS[p.gate] });
+            for (const s of [-1, 1]) {
+                const post = new THREE.Mesh(new THREE.BoxGeometry(1, p.height, 1), mat);
+                post.position.set(s * (p.width / 2 - 1), p.height / 2, 0);
+                grp.add(post);
+            }
+            const beam = new THREE.Mesh(new THREE.BoxGeometry(p.width, 1, 1), mat);
+            beam.position.set(0, p.height, 0);
+            grp.add(beam);
+            grp.position.set(...p.pos);
+            grp.rotation.y = -p.dir * Math.PI / 2;
+            content.add(grp);
+        } else if (p.kind === 'spawn') {
+            const d = [[0, 0, 1], [-1, 0, 0], [0, 0, -1], [1, 0, 0]][p.dir];
+            content.add(new THREE.ArrowHelper(new THREE.Vector3(...d), new THREE.Vector3(p.pos[0], p.pos[1] + 2, p.pos[2]), 10, 0x6bffb0, 4, 3));
+        } else if (p.kind === 'decor') {
+            const m = new THREE.Mesh(new THREE.ConeGeometry(4, 12, 8), new THREE.MeshLambertMaterial({ color: 0x2f8f5a }));
+            m.position.set(p.pos[0], p.pos[1] + 6, p.pos[2]);
+            content.add(m);
+        }
+    }
+    scene.add(content);
+
+    const b = world.bounds;
+    cam.target.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
+    const span = Math.max(b.max[0] - b.min[0], b.max[2] - b.min[2], (b.max[1] - b.min[1]) * 1.5);
+    cam.dist = span * 1.25 + 30;
+    if (params.get('focus')) cam.target.set(...params.get('focus').split(',').map(Number));
+    if (params.get('dist')) cam.dist = +params.get('dist');
+    if (params.get('yaw')) cam.yaw = +params.get('yaw');
+    if (params.get('pitch')) cam.pitch = +params.get('pitch');
+    if (document.getElementById('view').value === 'top') {
+        cam.pitch = Math.PI / 2 - 1e-3;
+        cam.yaw = 0;
+        const w = b.max[0] - b.min[0], d = b.max[2] - b.min[2];
+        const fit = Math.max(d, w / camera.aspect) / (2 * Math.tan(camera.fov * Math.PI / 360));
+        if (!params.get('dist')) cam.dist = fit * 1.1 + 20 + (b.max[1] - cam.target.y);
+    }
+
+    const route = world.route;
+    const lines = [
+        `${track.name} [${track.id}]  blocks ${track.blocks.length}`,
+        `build ${ms.toFixed(1)} ms  tris ${world.collision.triCount}  grid ${world.collision.gridEntries}`,
+        route ? `route ${route.length.toFixed(1)} m  pts ${route.count}  cps ${route.checkpoints.map((c) => c.s.toFixed(0)).join(', ')}${route.closed ? '  (lap)' : ''}` : `route: ${world.routeError || 'n/a'}`,
+        `triggers ${world.triggers.length}  props ${world.render.props.length}  hash ${world.hash}`,
+    ];
+    const st = document.getElementById('stats');
+    st.textContent = lines.join('\n');
+    for (const e of world.errors.concat(world.routeError ? [world.routeError] : [])) {
+        const d = document.createElement('div');
+        d.className = 'err';
+        d.textContent = e;
+        st.appendChild(d);
+    }
+    window.__viewer = { ready: true, world, track, buildMs: ms };
+}
+
+function updateCamera() {
+    const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+    camera.position.set(cam.target.x + cam.dist * cp * Math.sin(cam.yaw), cam.target.y + cam.dist * sp, cam.target.z + cam.dist * cp * Math.cos(cam.yaw));
+    camera.up.set(0, 1, 0);
+    if (cam.pitch > 1.5) camera.up.set(-Math.sin(cam.yaw), 0, -Math.cos(cam.yaw));
+    camera.lookAt(cam.target);
+}
+
+// Orbit-ish controls: left drag rotates, right/shift drag pans, wheel zooms.
+let drag = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; });
+addEventListener('pointerup', () => { drag = null; });
+addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.pan) {
+        const s = cam.dist / 600;
+        const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+        const fwd = new THREE.Vector3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw));
+        cam.target.addScaledVector(right, -dx * s).addScaledVector(fwd, -dy * s);
+    } else {
+        cam.yaw -= dx * 0.005;
+        cam.pitch = Math.max(-0.2, Math.min(Math.PI / 2 - 1e-3, cam.pitch + dy * 0.005));
+    }
+});
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+renderer.domElement.addEventListener('wheel', (e) => { cam.dist *= Math.exp(e.deltaY * 0.001); e.preventDefault(); }, { passive: false });
+addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+});
+
+const sel = document.getElementById('track');
+for (const t of samples) sel.add(new Option(`${t.id} ${t.name}`, t.id));
+for (const id of Object.keys(BLOCKS)) sel.add(new Option(`block: ${id}`, 'block:' + id));
+const initial = trackFromParams();
+if (params.get('code')) sel.add(new Option(`code: ${initial.name}`, initial.id));
+sel.value = initial.id === 'block' ? 'block:' + params.get('block') : initial.id;
+document.getElementById('view').value = params.get('view') === 'top' ? 'top' : 'iso';
+document.getElementById('wire').checked = params.get('wire') === '1';
+document.getElementById('render').checked = params.get('render') === '1';
+const rebuild = () => {
+    const v = sel.value;
+    params.delete('code');
+    if (v.startsWith('block:')) {
+        params.set('block', v.slice(6));
+        params.delete('track');
+    } else {
+        params.delete('block');
+        params.set('track', v);
+    }
+    build(trackFromParams());
+};
+sel.addEventListener('change', rebuild);
+for (const id of ['view', 'wire', 'render']) document.getElementById(id).addEventListener('change', () => build(trackFromParams()));
+
+build(initial);
+renderer.setAnimationLoop(() => {
+    updateCamera();
+    renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

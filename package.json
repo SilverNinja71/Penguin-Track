@@ -1,0 +1,19 @@
+{
+  "name": "penguintrack",
+  "version": "1.0.0",
+  "description": "Snow-themed Trackmania-style racer with TAS tools and an AI training kit",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node tools/test.mjs",
+    "verify-levels": "node tools/verify-levels.mjs",
+    "headless": "node tools/headless.mjs",
+    "train": "node tools/train.mjs",
+    "tas": "node tools/tas.mjs",
+    "serve": "cd .. && python3 server.py"
+  }
+}
