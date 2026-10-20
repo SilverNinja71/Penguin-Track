@@ -1,0 +1,59 @@
+/* Audio bench (dev/audio-demo.html). The game itself has no audio UI; these
+   styles only lay out the dev page on top of the shared tokens. */
+
+body.au-page {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+    user-select: auto;
+    background: radial-gradient(1200px 600px at 20% -10%, var(--bg-2), var(--bg));
+}
+
+.au-wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.au-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.au-head .pt-title { font-size: clamp(26px, 4vw, 38px); }
+.au-cols { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.au-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.au-panel h2 { margin: 0; }
+.au-hint { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+.au-sliders { display: grid; gap: 10px 16px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); margin-top: 10px; }
+.au-slider { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 14px; color: var(--muted); }
+.au-slider input[type="range"] { grid-column: 1 / -1; width: 100%; }
+.au-slider output { font-family: var(--mono); color: var(--text); font-size: 13px; }
+.au-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 14px; color: var(--muted); }
+.au-checks label { display: inline-flex; align-items: center; gap: 6px; }
+.au-checks select { font: 600 14px var(--font); color: var(--text); background: rgba(4, 14, 32, 0.7); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 4px 8px; }
+
+.au-drive { display: grid; grid-template-columns: 220px 1fr; gap: 14px; margin-top: 12px; align-items: start; }
+.au-drive canvas { width: 220px; height: 220px; border-radius: var(--radius-sm); background: rgba(4, 14, 32, 0.7); border: 1px solid var(--line); }
+.au-readout { font: 13px/1.5 var(--mono); color: var(--accent-2); white-space: pre-wrap; margin: 0; }
+.au-log { font: 12px/1.45 var(--mono); color: var(--muted); max-height: 120px; overflow: auto; margin: 8px 0 0; white-space: pre-wrap; }
+
+.au-summary { font-weight: 700; margin-top: 10px; }
+.au-summary.pass { color: var(--good); }
+.au-summary.fail { color: var(--bad); }
+.au-table-wrap { overflow-x: auto; margin-top: 10px; }
+.au-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.au-table th { text-align: left; color: var(--muted); font-weight: 700; padding: 6px 8px; border-bottom: 1px solid var(--line-strong); }
+.au-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-family: var(--mono); }
+.au-table td:first-child { font-family: var(--font); min-width: 190px; }
+.au-table tr.bad td:first-child b { color: var(--bad); }
+.au-table tr.ok td:first-child b { color: var(--text); }
+.au-table canvas { display: block; border-radius: 6px; }
+.au-note { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.au-relations { margin: 8px 0 0; padding-left: 18px; font-size: 14px; color: var(--muted); }
+.au-relations li.bad { color: var(--bad); }
+
+@media (max-width: 640px) {
+    .au-drive { grid-template-columns: 1fr; }
+    .au-drive canvas { width: 100%; height: auto; aspect-ratio: 1; }
+}

@@ -1,0 +1,6 @@
+# Optional: the env and random_agent.py need nothing beyond the Python standard library.
+# These are for train_ppo.py (and numpy / gymnasium make the env return proper spaces).
+gymnasium>=0.29
+numpy>=1.24
+stable-baselines3>=2.3
+torch>=2.1

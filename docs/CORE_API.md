@@ -278,7 +278,7 @@ Each **issue** is data the editor can act on:
 | `unreachableCheckpoint` | error | `checkpointIds` (0-based, = trigger ids), `blocks` |
 | `unreachableFinish`, `lapNotClosed`, `routeSearch` | error | |
 | `openEnd` | warning | `blocks`, `cell`, `dir`, `connector` (local index) |
-| `startFinishOneLap`, `finishOnLapTrack`, `medalOrder`, `decorOutside` | warning | `blocks` / `decor` |
+| `startFinishOneLap`, `finishOnLapTrack`, `medalOrder` (race tracks only), `decorOutside` | warning | `blocks` / `decor` |
 
 `placeByConnector`'s `cell` is the turtle cell: the cell just past an open face, i.e. for
 snapping onto connector `c` of a placed block, `c.cell + DIRS[c.dir]` with `dir = c.dir`;

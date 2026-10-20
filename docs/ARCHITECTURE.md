@@ -28,7 +28,8 @@ this document disagree, fix one of them so they match.
 penguintrack/
   index.html               app shell, import map, loads js/main.js            [shell]
   css/style.css            design tokens + shared components                  [shell; tokens fixed below]
-  css/<module>.css         per-module styles (editor.css, tas.css, ai.css, mp.css)
+  css/<module>.css         per-module styles (game.css for the shell, audio.css for the audio bench,
+                           editor.css, tas.css, ai.css, mp.css)
   favicon.svg
   vendor/                  three.module.min.js, three.core.min.js, addons/   [do not edit]
   js/main.js               bootstrap, App object, screen router               [shell]
@@ -57,10 +58,14 @@ penguintrack/
   js/tas/                  TAS studio, script language, bruteforce            [tas]
   js/ai/                   gym-style env, models, trainers, AI lab UI         [ai]
   js/mp/                   hot-seat, split-screen, online ghost rooms         [mp]
-  dev/                     dev-only pages (world-viewer.html, demos); not linked from the game
-  tools/                   Node CLIs: test (tests/*.test.mjs), sim-probe, verify-levels, headless env server, train, tas
+  dev/                     dev-only pages (world-viewer, render-demo, audio-demo); not linked from the game
+  tools/                   Node CLIs: test (tests/*.test.mjs), sim-probe, verify-levels, bake-levels,
+                           headless env server, train, tas
   python/                  gymnasium wrapper + training examples
-  docs/                    this file, CORE_API.md, TAS.md, AI.md, EDITOR.md, TRACK_FORMAT.md
+  models/                  trained AI drivers (demo-S01.json)                  [ai]
+  tas-examples/            example TAS scripts                                  [tas]
+  docs/                    this file, CORE_API.md, TRACK_FORMAT.md, GAME.md, RENDER.md, AUDIO.md,
+                           LEVELS.md, TAS.md, AI.md (EDITOR.md with the editor)
   package.json             "type": "module", scripts only, no dependencies
   README.md
 ```
@@ -311,4 +316,6 @@ Shared classes: `.pt-screen` (full overlay), `.pt-panel`, `.pt-btn` (+ `.primary
   autopilot finishes within its bronze time; reports times.
 - `node tools/headless.mjs` — JSON-lines environment server (AI, see `docs/AI.md`).
 - `node tools/train.mjs` — neuroevolution trainer without Python.
-- `node tools/tas.mjs <track> <script>` — run a TAS script headless, print result.
+- `node tools/tas.mjs run <track> <script>` — run a TAS script headless, print result
+  (also `bruteforce`, `from-replay`, `autopilot`, `compare`; see `docs/TAS.md`).
+- `node tools/bake-levels.mjs` — re-bake medals and Emperor ghosts after a layout or physics change.

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Penguintrack</title>
+    <meta name="description" content="Penguintrack: a snowy Trackmania-style time attack racer. Drive a penguin through icy 3D tracks, chase Emperor medals, build your own tracks, and play with TAS tools and an AI training lab.">
+    <meta name="theme-color" content="#0a1830">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/game.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./vendor/three.module.min.js",
+            "three/addons/": "./vendor/addons/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <canvas id="view" tabindex="-1" aria-label="Penguintrack 3D view"></canvas>
+    <div id="ui" aria-live="polite"></div>
+    <div id="boot" class="pt-boot" role="status">
+        <div class="pt-boot-card">
+            <img src="favicon.svg" width="72" height="72" alt="">
+            <div class="pt-boot-title">Penguintrack</div>
+            <div class="pt-boot-msg">Waxing the sled…</div>
+        </div>
+    </div>
+    <noscript>
+        <div class="pt-boot"><div class="pt-boot-card"><div class="pt-boot-title">Penguintrack</div><div class="pt-boot-msg">Penguintrack needs JavaScript turned on.</div></div></div>
+    </noscript>
+
+    <!-- Shared site account (optional): the game works without it. -->
+    <script src="../shared/accounts.js"></script>
+    <script type="module" src="js/main.js"></script>
+    <script>
+        // Browsers too old for ES modules or import maps never run main.js; say so instead of hanging on the boot card.
+        (function () {
+            var ok = 'noModule' in HTMLScriptElement.prototype && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap');
+            if (!ok) {
+                var m = document.querySelector('#boot .pt-boot-msg');
+                if (m) m.textContent = 'This browser is too old for Penguintrack. Try a recent Chrome, Edge, Firefox or Safari.';
+            }
+        })();
+    </script>
+</body>
+</html>

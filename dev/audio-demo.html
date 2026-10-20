@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Penguintrack Audio Bench</title>
+<link rel="icon" href="../favicon.svg">
+<link rel="stylesheet" href="../css/style.css">
+<link rel="stylesheet" href="../css/audio.css">
+</head>
+<body class="au-page">
+<main class="au-wrap">
+    <header class="au-head">
+        <h1 class="pt-title">Audio bench</h1>
+        <span class="pt-tag" id="state">locked</span>
+        <button class="pt-btn primary" id="unlock">Start audio</button>
+        <span class="pt-muted">Every sound is synthesised live (dev page; ?check=1 runs the offline checks).</span>
+    </header>
+
+    <section class="pt-panel au-panel">
+        <h2 class="pt-subtitle">Volume</h2>
+        <div class="au-sliders" id="volumes"></div>
+    </section>
+
+    <div class="au-cols" id="groups"></div>
+
+    <section class="pt-panel au-panel">
+        <h2 class="pt-subtitle">Car</h2>
+        <p class="au-hint">Manual engine feeds the sliders into updateCar; Drive sim runs the core Sim with the Autopilot in real time and feeds its car and events.</p>
+        <div class="au-checks">
+            <label><input type="checkbox" id="manual"> Manual engine</label>
+            <label><input type="checkbox" id="autogear" checked> Gear and rpm from speed</label>
+            <label><input type="checkbox" id="gas" checked> Gas</label>
+            <label><input type="checkbox" id="drifting"> Drifting</label>
+            <label><input type="checkbox" id="airborne"> Airborne</label>
+            <label><input type="checkbox" id="frozen"> Frozen Engine</label>
+            <label>Surface <select id="surface">
+                <option value="snow">Packed Snow</option><option value="powder">Powder</option>
+                <option value="ice">Ice</option><option value="ground">Deep Snow</option>
+            </select></label>
+            <label>Boost <select id="turbo">
+                <option value="0">none</option><option value="1">Frost Boost</option><option value="2">Avalanche Boost</option>
+            </select></label>
+            <label>Snow Globe <select id="slowmo">
+                <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
+            </select></label>
+        </div>
+        <div class="au-sliders" id="carSliders"></div>
+        <div class="au-checks">
+            <button class="pt-btn" id="drive">Drive sim</button>
+            <label>Track <select id="track">
+                <option>S01</option><option>S02</option><option selected>S03</option><option>S04</option><option>S05</option><option>S06</option>
+            </select></label>
+            <label><input type="checkbox" id="loop" checked> Loop</label>
+        </div>
+        <div class="au-drive">
+            <canvas id="map" width="440" height="440"></canvas>
+            <div>
+                <pre class="au-readout" id="readout">Car idle.</pre>
+                <pre class="au-log" id="log"></pre>
+            </div>
+        </div>
+    </section>
+
+    <section class="pt-panel au-panel">
+        <h2 class="pt-subtitle">Offline render checks</h2>
+        <p class="au-hint">Renders every voice, real drives and the music with OfflineAudioContext, raw and through the full mix at full volume. Columns: peak raw / mix, RMS / loudest 50 ms, spectral centroid; waveform and log-frequency spectrogram (40 Hz – 18 kHz).</p>
+        <div class="au-checks"><button class="pt-btn" id="runChecks">Run offline checks</button><span id="progress"></span></div>
+        <div class="au-summary" id="summary"></div>
+        <ul class="au-relations" id="relations"></ul>
+        <div class="au-table-wrap">
+            <table class="au-table">
+                <thead><tr><th>sound</th><th>len</th><th>peak</th><th>rms</th><th>colour</th><th>waveform / spectrogram</th></tr></thead>
+                <tbody id="results"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<script type="module">
+import { AudioEngine } from '../js/audio/audio.js';
+import { snapshotCar } from '../js/core/replay.js';
+import { buildWorld } from '../js/core/track.js';
+import { getSample } from '../js/core/samples.js';
+import { Sim } from '../js/core/sim.js';
+import { Autopilot } from '../js/core/autopilot.js';
+import { runChecks } from './audio-check.js';
+
+const $ = (id) => document.getElementById(id);
+const audio = new AudioEngine({ volume: { master: 0.8, sfx: 0.9, music: 0.55 } });
+window.__audio = audio;
+audio.autoUnlock(window);
+
+function refreshState() {
+    const s = !audio.available ? 'no WebAudio' : audio.unlocked ? 'running' : audio.ctx ? audio.ctx.state : 'locked';
+    $('state').textContent = s;
+}
+setInterval(refreshState, 500);
+$('unlock').addEventListener('click', () => audio.unlock().then(refreshState));
+
+// ---------------------------------------------------------------- sliders
+
+function slider(parent, { label, min, max, step, value, fmt = (v) => v, onInput }) {
+    const wrap = document.createElement('label');
+    wrap.className = 'au-slider';
+    wrap.innerHTML = `<span>${label}</span><output></output><input type="range" min="${min}" max="${max}" step="${step}" value="${value}">`;
+    const input = wrap.querySelector('input'), out = wrap.querySelector('output');
+    const show = () => { out.textContent = fmt(+input.value); };
+    input.addEventListener('input', () => { show(); if (onInput) onInput(+input.value); });
+    show();
+    parent.appendChild(wrap);
+    return { input, set(v) { input.value = v; show(); }, get value() { return +input.value; } };
+}
+
+const pct = (v) => Math.round(v * 100) + '%';
+for (const key of ['master', 'sfx', 'music']) {
+    slider($('volumes'), { label: key, min: 0, max: 1, step: 0.01, value: audio.volume[key], fmt: pct,
+        onInput: (v) => audio.setVolume({ [key]: v }) });
+}
+
+// ---------------------------------------------------------------- buttons
+
+const GROUPS = [
+    ['Race', [
+        ['Checkpoint', () => audio.handleEvents([{ type: 'checkpoint' }])],
+        ['Split ahead', () => audio.chime('good')],
+        ['Split behind', () => audio.chime('bad')],
+        ['Lap', () => audio.handleEvents([{ type: 'lap', lap: 1 }])],
+        ['Finish', () => audio.handleEvents([{ type: 'finish' }])],
+        ['Missing checkpoints', () => audio.handleEvents([{ type: 'missingCheckpoints', missing: [0] }])],
+        ['Respawn', () => audio.handleEvents([{ type: 'respawn', checkpoint: 0 }])],
+        ['Fall', () => audio.handleEvents([{ type: 'fall' }])],
+    ]],
+    ['Countdown', [
+        ['3', () => audio.countdown(3)], ['2', () => audio.countdown(2)], ['1', () => audio.countdown(1)], ['GO', () => audio.go()],
+        ['3 · 2 · 1 · GO', () => countdownSequence()],
+    ]],
+    ['Boosts and pads', [
+        ['Frost Boost', () => audio.handleEvents([{ type: 'boost', level: 1 }, { type: 'effect', effect: 'turbo' }])],
+        ['Avalanche Boost', () => audio.handleEvents([{ type: 'boost', level: 2 }, { type: 'effect', effect: 'turbo2' }])],
+        ['Frozen Engine', () => audio.handleEvents([{ type: 'effect', effect: 'noEngine' }])],
+        ['Frozen Wheel', () => audio.handleEvents([{ type: 'effect', effect: 'noSteer' }])],
+        ['Brake Freeze', () => audio.handleEvents([{ type: 'effect', effect: 'noBrake' }])],
+        ['Snow Globe', () => audio.handleEvents([{ type: 'effect', effect: 'slowmo' }])],
+        ['Glide', () => audio.handleEvents([{ type: 'effect', effect: 'cruise' }])],
+        ['Thin Ice', () => audio.handleEvents([{ type: 'effect', effect: 'fragile' }])],
+        ['Thaw', () => audio.handleEvents([{ type: 'effect', effect: 'reset' }])],
+    ]],
+    ['Impacts', [
+        ['Soft landing', () => audio.handleEvents([{ type: 'land', strength: 3, airTime: 0.3 }])],
+        ['Landing', () => audio.handleEvents([{ type: 'land', strength: 10, airTime: 0.8 }])],
+        ['Hard landing', () => audio.handleEvents([{ type: 'land', strength: 28, airTime: 1.6 }])],
+        ['Wall tap', () => audio.play('wallhit', { intensity: 3 })],
+        ['Wall hit left', () => audio.play('wallhit', { intensity: 14, pan: -0.6 })],
+        ['Wall hit right', () => audio.play('wallhit', { intensity: 14, pan: 0.6 })],
+        ['Wall smash', () => audio.play('wallhit', { intensity: 40 })],
+        ['Thin Ice breaks', () => audio.handleEvents([{ type: 'fragileBreak', cause: 'wall' }])],
+    ]],
+    ['Menus', [
+        ['Click', () => audio.ui('click')], ['Hover', () => audio.ui('hover')], ['Back', () => audio.ui('back')],
+        ['Error', () => audio.ui('error')],
+        ['Bronze', () => audio.ui('medal', 'bronze')], ['Silver', () => audio.ui('medal', 'silver')],
+        ['Gold', () => audio.ui('medal', 'gold')], ['Emperor', () => audio.ui('medal', 'emperor')],
+        ['Music on', () => audio.music(true)], ['Music off', () => audio.music(false)],
+    ]],
+];
+
+for (const [title, buttons] of GROUPS) {
+    const sec = document.createElement('section');
+    sec.className = 'pt-panel au-panel';
+    sec.innerHTML = `<h2 class="pt-subtitle">${title}</h2><div class="au-btns"></div>`;
+    const box = sec.querySelector('.au-btns');
+    for (const [label, fn] of buttons) {
+        const b = document.createElement('button');
+        b.className = 'pt-btn small';
+        b.textContent = label;
+        b.addEventListener('click', async () => { await audio.unlock(); fn(); });
+        b.addEventListener('mouseenter', () => { if (label !== 'Hover') audio.ui('hover'); });
+        box.appendChild(b);
+    }
+    $('groups').appendChild(sec);
+}
+
+function countdownSequence() {
+    return new Promise((done) => {
+        [3, 2, 1].forEach((n, i) => setTimeout(() => audio.countdown(n), i * 1000));
+        setTimeout(() => { audio.go(); done(); }, 3000);
+    });
+}
+
+// -------------------------------------------------------------- manual car
+
+const GEARS = [0, 45, 90, 140, 190, 245];
+const car = {
+    speed: slider($('carSliders'), { label: 'speed', min: 0, max: 320, step: 1, value: 0, fmt: (v) => v + ' km/h' }),
+    rpm: slider($('carSliders'), { label: 'rpm', min: 0, max: 1, step: 0.01, value: 0.25, fmt: (v) => v.toFixed(2) }),
+    gear: slider($('carSliders'), { label: 'gear', min: 1, max: 6, step: 1, value: 1 }),
+    slip: slider($('carSliders'), { label: 'wheel slip', min: 0, max: 1, step: 0.01, value: 0, fmt: (v) => v.toFixed(2) }),
+};
+
+function manualView() {
+    const kmh = car.speed.value;
+    let gear = car.gear.value, rpm = car.rpm.value;
+    if ($('autogear').checked) {
+        gear = 1;
+        while (gear < 6 && kmh >= GEARS[gear]) gear++;
+        const hi = gear < 6 ? GEARS[gear] : 340;
+        rpm = 0.25 + 0.75 * Math.min(1, (kmh - GEARS[gear - 1]) / (hi - GEARS[gear - 1]));
+        if ($('gas').checked && kmh < 5) rpm = 0.45;
+        if ($('airborne').checked && $('gas').checked) rpm = 0.95;
+        car.gear.set(gear);
+        car.rpm.set(rpm);
+    }
+    const surface = $('surface').value, air = $('airborne').checked;
+    const turbo = +$('turbo').value;
+    return {
+        speedKmh: kmh, speed: kmh / 3.6, forwardSpeed: kmh / 3.6, rpm, gear, airborne: air,
+        drifting: $('drifting').checked && !air, surfaceUnder: air ? null : surface,
+        wheels: [0, 1, 2, 3].map(() => ({ contact: !air, surface: air ? null : surface, slip: car.slip.value })),
+        effects: { turbo, turboTime: turbo ? 2 : 0, noEngine: $('frozen').checked, slowmo: +$('slowmo').value },
+        pos: [0, 0, 0], quat: [0, 0, 0, 1],
+    };
+}
+
+// ------------------------------------------------------------- drive sim
+
+let drive = null;
+const ctx2d = $('map').getContext('2d');
+
+async function startDrive() {
+    await audio.unlock();
+    $('manual').checked = false;
+    const world = buildWorld(getSample($('track').value));
+    drive = { world, sim: new Sim(world), pilot: new Autopilot(world), acc: 0, snap: null, log: [], finishedAt: 0, started: false };
+    $('drive').textContent = 'Stop drive';
+    $('drive').classList.add('active');
+    await countdownSequence();
+    if (drive) drive.started = true;
+}
+
+function stopDrive() {
+    drive = null;
+    audio.stopCar();
+    $('drive').textContent = 'Drive sim';
+    $('drive').classList.remove('active');
+}
+
+$('drive').addEventListener('click', () => (drive ? stopDrive() : startDrive()));
+$('manual').addEventListener('change', async () => {
+    if ($('manual').checked) {
+        await audio.unlock();
+        if (drive) stopDrive();
+    } else {
+        audio.stopCar();
+    }
+});
+
+function stepDrive(dt) {
+    const d = drive;
+    if (!d.started) {
+        audio.updateCar(snapshotCar(d.sim.car, d.snap), dt, { gas: false, brake: false });
+        return;
+    }
+    d.acc += Math.min(dt, 0.25);
+    while (d.acc >= 0.01) {
+        d.acc -= 0.01;
+        d.sim.step(d.pilot.act(d.sim));
+        if (d.sim.events.length) {
+            audio.handleEvents(d.sim.events);
+            for (const ev of d.sim.events) {
+                const extra = Object.entries(ev).filter(([k]) => k !== 'type' && k !== 'tick' && k !== 'pos')
+                    .map(([k, v]) => `${k}=${typeof v === 'number' ? +v.toFixed(2) : JSON.stringify(v)}`).join(' ');
+                d.log.unshift(`${(d.sim.tick / 100).toFixed(2)}s ${ev.type} ${extra}`);
+            }
+            d.log.length = Math.min(d.log.length, 40);
+        }
+    }
+    d.snap = snapshotCar(d.sim.car, d.snap);
+    audio.updateCar(d.snap, dt, d.sim.lastInput);
+    if (d.sim.finished) {
+        d.finishedAt += dt;
+        if (d.finishedAt > 4) {
+            if ($('loop').checked) {
+                const s = drive;
+                s.sim.reset(); s.pilot.reset(); s.finishedAt = 0; s.started = false;
+                countdownSequence().then(() => { if (drive === s) s.started = true; });
+            } else {
+                stopDrive();
+            }
+        }
+    }
+}
+
+function drawMap() {
+    const g = ctx2d, W = 440;
+    g.clearRect(0, 0, W, W);
+    if (!drive || !drive.world.route) return;
+    const pts = drive.world.route.points;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let i = 0; i < pts.length; i += 3) {
+        x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]);
+        z0 = Math.min(z0, pts[i + 2]); z1 = Math.max(z1, pts[i + 2]);
+    }
+    const span = Math.max(x1 - x0, z1 - z0, 1);
+    const k = (W - 40) / span;
+    const sx = (x) => W / 2 + (x - (x0 + x1) / 2) * k;
+    const sz = (z) => W / 2 + (z - (z0 + z1) / 2) * k;
+    g.strokeStyle = 'rgba(184, 241, 255, 0.55)';
+    g.lineWidth = 3;
+    g.beginPath();
+    for (let i = 0; i < pts.length; i += 3) {
+        const x = sx(pts[i]), y = sz(pts[i + 2]);
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.stroke();
+    const p = drive.sim.car.pos;
+    g.fillStyle = '#ffd54a';
+    g.beginPath();
+    g.arc(sx(p[0]), sz(p[2]), 7, 0, Math.PI * 2);
+    g.fill();
+}
+
+let last = performance.now();
+function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (drive) {
+        stepDrive(dt);
+        const c = drive.sim.car;
+        $('readout').textContent = [
+            `${$('track').value}  t ${(drive.sim.timeMs / 1000).toFixed(2)} s${drive.sim.finished ? '  FINISHED' : ''}`,
+            `speed ${c.speedKmh.toFixed(0).padStart(3)} km/h   gear ${c.gear}   rpm ${c.rpm.toFixed(2)}`,
+            `surface ${c.surfaceUnder || '-'}   ${c.airborne ? 'AIR ' : ''}${c.drifting ? 'DRIFT ' : ''}${c.effects.turbo ? 'BOOST ' : ''}`,
+            `engine f0 ${(audio._carParams.f0 || 0).toFixed(1)} Hz  squeal ${(audio._carParams.squeal || 0).toFixed(2)}  wind ${(audio._carParams.wind || 0).toFixed(2)}`,
+        ].join('\n');
+        $('log').textContent = drive.log.join('\n');
+    } else if ($('manual').checked) {
+        const v = manualView();
+        audio.updateCar(v, dt, { gas: $('gas').checked, brake: false });
+        const p = audio._carParams;
+        $('readout').textContent = `manual: ${v.speedKmh} km/h, gear ${v.gear}, rpm ${v.rpm.toFixed(2)}\n`
+            + `engine f0 ${(p.f0 || 0).toFixed(1)} Hz, cutoff ${(p.cutoff || 0).toFixed(0)} Hz, squeal ${(p.squeal || 0).toFixed(2)}, wind ${(p.wind || 0).toFixed(2)}`;
+    }
+    drawMap();
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---------------------------------------------------------------- checks
+
+const query = new URLSearchParams(location.search);
+
+async function checks() {
+    $('runChecks').disabled = true;
+    $('results').textContent = '';
+    $('relations').textContent = '';
+    $('summary').textContent = '';
+    const res = await runChecks($('results'), {
+        filter: query.get('filter') || '', width: +query.get('w') || 420, height: +query.get('h') || 110,
+        onProgress: (i, n, r) => { $('progress').textContent = ` ${i} / ${n}: ${r.name}`; },
+    });
+    $('summary').textContent = res.pass ? `All ${res.results.length} renders and ${res.relations.length} relations pass.`
+        : `Failures: ${res.results.filter((r) => !r.ok).map((r) => r.name).concat(res.relations.filter((r) => !r.ok).map((r) => r.name)).join(', ')}`;
+    $('summary').className = 'au-summary ' + (res.pass ? 'pass' : 'fail');
+    for (const r of res.relations) {
+        const li = document.createElement('li');
+        li.className = r.ok ? '' : 'bad';
+        li.textContent = `${r.ok ? 'ok' : 'FAIL'}: ${r.name}`;
+        $('relations').appendChild(li);
+    }
+    $('runChecks').disabled = false;
+}
+$('runChecks').addEventListener('click', checks);
+if (query.has('check')) checks().catch((e) => { window.__audioCheck = { done: true, pass: false, error: String(e && e.stack || e) }; console.error(e); });
+</script>
+</body>
+</html>

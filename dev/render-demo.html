@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Penguintrack Render Demo</title>
+<link rel="icon" href="../favicon.svg">
+<style>
+    :root { --bg: #0a1830; --panel: rgba(12, 30, 60, 0.82); --text: #eef6ff; --muted: #9db8d9; --accent: #7fdcff; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+        font: 12px/1.45 ui-monospace, "SF Mono", Menlo, monospace; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #hud { position: absolute; top: 8px; left: 8px; background: var(--panel); padding: 7px 10px; border-radius: 10px;
+        white-space: pre; pointer-events: none; }
+    #hud b { color: var(--accent); }
+    #help { position: absolute; bottom: 8px; left: 8px; color: var(--muted); background: var(--panel); padding: 5px 9px; border-radius: 8px; }
+    .err { color: #ff6b81; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three.module.min.js", "three/addons/": "../vendor/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="hud">loading…</div>
+<div id="help">1 chase · 2 close · 3 cockpit · 4 free · 5 orbit · 6 top · M mood · Q quality · P pause · R restart · H highlight</div>
+<script type="module">
+// Query: ?track=S01..S06 | <level id> & mood=day|sunset|night|aurora & cam=chase|close|cockpit|free|orbit|top
+//        & quality=low|medium|high & t=<seconds: simulate to t, then pause> & reduced=1 & split=1
+//        & ghost=1 | rival=ai|remote|ghost (a second autopilot car, driving a little slower)
+import { GameRenderer } from '../js/render/renderer.js';
+import { getSample } from '../js/core/samples.js';
+import { buildWorld } from '../js/core/track.js';
+import { Sim } from '../js/core/sim.js';
+import { Autopilot } from '../js/core/autopilot.js';
+import { snapshotCar } from '../js/core/replay.js';
+import { TICK } from '../js/core/constants.js';
+import { MOOD_IDS } from '../js/render/environment.js';
+
+const q = new URLSearchParams(location.search);
+const hud = document.getElementById('hud');
+const canvas = document.getElementById('view');
+
+async function loadTrack(id) {
+    const s = getSample(id);
+    if (s) return s;
+    try {
+        const levels = await import('../js/levels/index.js');
+        const t = levels.getTrack(id);
+        if (t) return t;
+    } catch (e) {
+        console.warn('levels unavailable:', e.message);
+    }
+    return getSample('S01');
+}
+
+const track = await loadTrack(q.get('track') || 'S01');
+const world = buildWorld(track);
+const r = new GameRenderer(canvas, { quality: q.get('quality') || 'medium', reducedMotion: q.get('reduced') === '1', preserveDrawingBuffer: true });
+r.loadWorld(world, track);
+if (q.get('mood')) r.setMood(q.get('mood'));
+addEventListener('resize', () => r.resize());
+
+const sim = new Sim(world);
+const pilot = new Autopilot(world);
+const car = r.addCar({ kind: 'player' });
+let ghostCar = null, ghostSim = null, ghostPilot = null, ghostPrev = null, ghostCurr = null;
+const rival = q.get('ghost') === '1' ? 'ghost' : q.get('rival');
+if (rival) {
+    ghostCar = r.addCar({ kind: rival, color: rival === 'ai' ? '#3f8ff0' : undefined, label: rival === 'remote' ? 'Pingu' : '' });
+    ghostSim = new Sim(world);
+    ghostPilot = new Autopilot(world, { gripMargin: 0.8 });
+}
+let prev = snapshotCar(sim.car), curr = snapshotCar(sim.car);
+if (ghostSim) { ghostPrev = snapshotCar(ghostSim.car); ghostCurr = snapshotCar(ghostSim.car); }
+r.setCameraMode(q.get('cam') || 'chase', car);
+if (q.get('split') === '1') {
+    const cam2 = r.createCamera('close', ghostCar || car);
+    r.setViewports([{ x: 0, y: 0, w: 0.5, h: 1, camera: r.camera }, { x: 0.5, y: 0, w: 0.5, h: 1, camera: cam2 }]);
+}
+
+function tick() {
+    let input = pilot.act(sim);
+    if (sim.finished) input = { steer: 0, gas: false, brake: false };
+    prev = snapshotCar(sim.car, prev);
+    sim.step(input);
+    curr = snapshotCar(sim.car, curr);
+    r.handleEvents(sim.events, car);
+    if (ghostSim) {
+        const gi = ghostPilot.act(ghostSim);
+        ghostPrev = snapshotCar(ghostSim.car, ghostPrev);
+        ghostSim.step(gi);
+        ghostCurr = snapshotCar(ghostSim.car, ghostCurr);
+    }
+}
+
+function pose(alpha) {
+    car.setPose(prev, curr, alpha);
+    if (ghostCar) ghostCar.setPose(ghostPrev, ghostCurr, alpha);
+}
+
+let paused = false;
+const target = q.get('t') != null ? Math.max(0, +q.get('t')) : null;
+if (target != null) {
+    // Simulate quickly, then play the last second frame by frame (effects, cameras) and pause.
+    const total = Math.round(target / TICK);
+    const warm = Math.min(total, 100);
+    while (sim.tick < total - warm) tick();
+    pose(1);
+    r.update(0);
+    r.cameraControls.snap();
+    while (sim.tick < total) {
+        for (let k = 0; k < 2 && sim.tick < total; k++) tick();
+        pose(1);
+        r.update(1 / 50);
+    }
+    paused = true;
+}
+
+const moods = MOOD_IDS;
+const quals = ['low', 'medium', 'high'];
+addEventListener('keydown', (e) => {
+    const cams = { Digit1: 'chase', Digit2: 'close', Digit3: 'cockpit', Digit4: 'free', Digit5: 'orbit', Digit6: 'top' };
+    if (cams[e.code]) r.setCameraMode(cams[e.code], car);
+    else if (e.code === 'KeyM') r.setMood(moods[(moods.indexOf(r.mood) + 1) % moods.length]);
+    else if (e.code === 'KeyQ' && r.cameraMode !== 'free') r.setQuality(quals[(quals.indexOf(r.quality) + 1) % quals.length]);
+    else if (e.code === 'KeyP') paused = !paused;
+    else if (e.code === 'KeyR') { sim.reset(); pilot.reset(); prev = snapshotCar(sim.car, prev); curr = snapshotCar(sim.car, curr); car.teleported(); }
+    else if (e.code === 'KeyH') r.setTrackHighlight(r._hl = r._hl == null ? 3 : null);
+});
+
+let acc = 0, last = performance.now();
+let still = paused;      // a paused ?t= frame is drawn once (deterministic screenshots), then idles
+addEventListener('keydown', () => { still = false; });
+addEventListener('pointerdown', () => { still = false; });
+function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (still && window.__demo.frames > 0) {
+        requestAnimationFrame(frame);
+        return;
+    }
+    if (!paused) {
+        acc += dt;
+        let n = 0;
+        while (acc >= TICK && n < 25) { tick(); acc -= TICK; n++; }
+        if (n === 25) acc = 0;
+    }
+    pose(paused ? 1 : acc / TICK);
+    r.render(paused ? 0 : dt);
+    const s = r.stats();
+    hud.innerHTML = `<b>${track.id}</b> ${track.name}  ${r.mood}  ${r.cameraMode}  ${r.quality}\n` +
+        `t ${(sim.timeMs / 1000).toFixed(2)} s  ${Math.round(sim.car.speedKmh)} km/h  ${sim.finished ? 'FINISHED' : ''}\n` +
+        `fps ${s.fps.toFixed(0)}  draws ${s.drawCalls}  tris ${(s.triangles / 1000).toFixed(0)}k  ${s.frameMs.toFixed(1)} ms`;
+    window.__demo.frames++;
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.__demo = { ready: true, frames: 0, renderer: r, sim, world, track, car };
+</script>
+</body>
+</html>

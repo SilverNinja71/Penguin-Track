@@ -198,7 +198,8 @@ export function analyzeTrack(trackIn, issues = new Issues()) {
         const arches = placements.filter((p) => p && p.def.gate === 'finish').map((p) => p.index);
         if (arches.length) issues.warn('finishOnLapTrack', 'Finish arches on a lap track only count on the last lap', { blocks: arches });
     }
-    const ord = MEDAL_KEYS.map((k) => track.medals[k]).filter((v) => typeof v === 'number');
+    // Platform medals are respawn caps (plus an Emperor time), not an ordered list of times.
+    const ord = track.mode === 'platform' ? [] : MEDAL_KEYS.map((k) => track.medals[k]).filter((v) => typeof v === 'number');
     for (let i = 1; i < ord.length; i++) {
         if (ord[i] < ord[i - 1]) { issues.warn('medalOrder', 'Medal times are not in order (author <= gold <= silver <= bronze)'); break; }
     }

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Penguintrack World Viewer</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <style>
     :root { --bg: #0a1830; --panel: rgba(12, 30, 60, 0.85); --text: #eef6ff; --muted: #9db8d9; --accent: #7fdcff; }
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; overflow: hidden; }
@@ -40,8 +41,9 @@ import { buildWorld, normalizeTrack } from '../js/core/track.js';
 import { BLOCKS } from '../js/core/blocks.js';
 import { decodeTrack } from '../js/core/codec.js';
 import { SURFACE_IDS } from '../js/core/constants.js';
+import { getTrack, trackIds, trackInfo } from '../js/levels/index.js';
 
-// Query: ?track=S01 | ?block=Loop&s=ice&r=1&y=2 | ?code=PT1.… ; view=top|iso ; yaw, pitch, dist, focus=x,y,z ; wire=1 ; render=1
+// Query: ?track=S01 | ?level=A01 | ?block=Loop&s=ice&r=1&y=2 | ?code=PT1.… ; view=top|iso ; yaw, pitch, dist, focus=x,y,z ; wire=1 ; render=1
 const params = new URLSearchParams(location.search);
 const samples = getSamples();
 
@@ -71,6 +73,7 @@ let world = null;
 const cam = { target: new THREE.Vector3(), yaw: 0.8, pitch: 0.6, dist: 300 };
 
 function trackFromParams() {
+    if (params.get('level') && getTrack(params.get('level'))) return getTrack(params.get('level'));
     if (params.get('code')) {
         try {
             return normalizeTrack(decodeTrack(params.get('code')));
@@ -272,19 +275,25 @@ addEventListener('resize', () => {
 });
 
 const sel = document.getElementById('track');
-for (const t of samples) sel.add(new Option(`${t.id} ${t.name}`, t.id));
+for (const id of trackIds()) sel.add(new Option(`${id} ${trackInfo(id).name}`, 'level:' + id));
+for (const t of samples) sel.add(new Option(`${t.id} ${t.name} (sample)`, t.id));
 for (const id of Object.keys(BLOCKS)) sel.add(new Option(`block: ${id}`, 'block:' + id));
 const initial = trackFromParams();
 if (params.get('code')) sel.add(new Option(`code: ${initial.name}`, initial.id));
-sel.value = initial.id === 'block' ? 'block:' + params.get('block') : initial.id;
+sel.value = initial.id === 'block' ? 'block:' + params.get('block') : params.get('level') ? 'level:' + initial.id : initial.id;
 document.getElementById('view').value = params.get('view') === 'top' ? 'top' : 'iso';
 document.getElementById('wire').checked = params.get('wire') === '1';
 document.getElementById('render').checked = params.get('render') === '1';
 const rebuild = () => {
     const v = sel.value;
     params.delete('code');
+    params.delete('level');
     if (v.startsWith('block:')) {
         params.set('block', v.slice(6));
+        params.delete('track');
+    } else if (v.startsWith('level:')) {
+        params.set('level', v.slice(6));
+        params.delete('block');
         params.delete('track');
     } else {
         params.delete('block');
