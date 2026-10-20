@@ -2,7 +2,7 @@
 // remapping for every action. Every change is saved at once.
 import { h } from './dom.js';
 import { icon } from './icons.js';
-import { ACTIONS, CAMERAS, DEFAULT_BINDINGS, cloneBindings, defaultSettings, keyLabel } from './settings.js';
+import { ACTIONS, CAMERAS, DEFAULT_BINDINGS, cloneBindings, defaultSettings, keyLabel, bindingsConflict } from './settings.js';
 import { openModal } from './ui.js';
 
 function slider(app, label, get, set, { min = 0, max = 1, step = 0.05, fmt = (v) => `${Math.round(v * 100)}%` } = {}) {
@@ -55,7 +55,9 @@ export function buildSettings(app, { compact = false } = {}) {
     sections.push(h('section.set-section',
         h('h2.set-title', icon('flag', 20), 'Race'),
         segmented(app, 'Default camera', CAMERAS, () => s.camera, (v) => { s.camera = v; }),
-        toggle(app, 'Personal-best ghost', () => s.showGhost, (v) => { s.showGhost = v; }),
+        toggle(app, 'Best human ghost', () => s.showGhost, (v) => { s.showGhost = v; }, 'your personal best Pure run'),
+        toggle(app, 'Best TAS ghost', () => s.showTasGhost, (v) => { s.showTasGhost = v; }, 'fastest Quick TAS or Studio run'),
+        toggle(app, 'Best AI ghost', () => s.showAiGhost, (v) => { s.showAiGhost = v; }, 'fastest AI Lab or autopilot run'),
         toggle(app, 'Emperor ghost', () => s.showEmperorGhost, (v) => { s.showEmperorGhost = v; }, 'the author run, when the track has one'),
         toggle(app, 'Checkpoint splits', () => s.showSplits, (v) => { s.showSplits = v; }),
         toggle(app, 'Minimap', () => s.showMinimap, (v) => { s.showMinimap = v; }),
@@ -146,9 +148,10 @@ function keySection(app) {
             }
             const code = e.code;
             if (!code) return;
-            // A key does one thing: take it away from any other action first.
+            // A key does one thing: take it away from any other action first (Quick TAS
+            // keys may share with the race actions they replace while Quick TAS runs).
             for (const other of ACTIONS) {
-                if (other.id === action) continue;
+                if (!bindingsConflict(action, other.id)) continue;
                 const list = s.bindings[other.id] || [];
                 if (list.includes(code)) {
                     s.bindings[other.id] = list.filter((k) => k !== code);

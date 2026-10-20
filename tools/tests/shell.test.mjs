@@ -6,10 +6,13 @@ import { test } from './_harness.mjs';
 import { sanitizeSettings, defaultSettings, keyLabel, DEFAULT_BINDINGS, ACTIONS } from '../../js/game/settings.js';
 import { Controls } from '../../js/game/controls.js';
 import { Loop } from '../../js/game/loop.js';
-import { submitRun, awardMedalGold, getRecord, saveReplay, listReplays, deleteReplay } from '../../js/game/records.js';
+import {
+    submitRun, awardMedalGold, getRecord, saveReplay, listReplays, deleteReplay, submitBoardRun, getBoards, boardLeader, entryLabel, BOARD_SIZE,
+} from '../../js/game/records.js';
+import * as realStorage from '../../js/game/storage.js';
 import { encodeReplayCode, decodeReplayCode, encodeReplayCodeAsync, decodeReplayCodeAsync, decodeReplayText } from '../../js/game/replaycode.js';
 import { encodeTrack } from '../../js/core/codec.js';
-import { GhostRun } from '../../js/game/ghost.js';
+import { GhostRun, categoryGhosts, CATEGORY_GHOSTS } from '../../js/game/ghost.js';
 import { makeCatalog } from '../../js/game/catalog.js';
 import { getSample } from '../../js/core/samples.js';
 import { buildWorld } from '../../js/core/track.js';
@@ -247,6 +250,104 @@ test('records: first-time medal gold goes to the signed-in site account once', (
         assert.equal(awardMedalGold(storage, cat, 'my-track', 'emperor'), null);
     } finally {
         clearSiteAccount();
+    }
+});
+
+test('leaderboards: Pure / TAS / AI boards, top five, only the leader keeps its replay', () => {
+    const storage = memoryStorage();
+    const cat = makeCatalog({ storage });
+    const track = cat.getTrack('A01');
+    const hash = buildWorld(track).hash;
+    const rep = (n) => ({ inputs: '1:B*2', trackHash: hash, name: `run ${n}` });
+    // An old personal best (saved before the boards existed) shows on the Pure board.
+    submitRun(storage, cat, track, hash, { timeMs: 30000, respawns: 0, replay: rep('pb'), splits: [] });
+    let b = getBoards(storage, cat, track, hash);
+    assert.deepEqual(b.pure.map((e) => e.timeMs), [30000]);
+    assert.equal(b.pure[0].replay.name, 'run pb');
+    assert.deepEqual([b.tas.length, b.ai.length], [0, 0]);
+
+    const quick = submitBoardRun(storage, cat, track, hash, 'tas', { timeMs: 25000, respawns: 0, replay: rep('q'), source: 'quick', label: 'Quick TAS', rewinds: 7 });
+    assert.deepEqual([quick.rank, quick.improved, quick.previous], [1, true, null]);
+    const studio = submitBoardRun(storage, cat, track, hash, 'tas', { timeMs: 24000, respawns: 0, replay: rep('s'), source: 'studio' });
+    assert.equal(studio.improved, true);
+    assert.equal(studio.previous.timeMs, 25000);
+    submitBoardRun(storage, cat, track, hash, 'ai', { timeMs: 28000, replay: rep('ai'), source: 'lab', label: 'ES · gen 12', model: '16-16 net' });
+    b = getBoards(storage, cat, track, hash);
+    assert.deepEqual(b.tas.map((e) => [e.timeMs, entryLabel(e)]), [[24000, 'Studio/Bruteforce'], [25000, 'Quick TAS']]);
+    assert.equal(b.tas[1].rewinds, 7);
+    assert.equal(b.tas[1].replay, null, 'a dethroned run gives up its replay');
+    assert.equal(boardLeader(storage, cat, track, hash, 'tas').replay.name, 'run s');
+    assert.equal(b.ai[0].model, '16-16 net');
+    const again = submitBoardRun(storage, cat, track, hash, 'tas', { timeMs: 24000, respawns: 0, replay: rep('s2'), source: 'studio' });
+    assert.deepEqual([again.duplicate, again.rank, again.improved], [true, 1, false], 'Validate twice lists the run once');
+    assert.equal(getBoards(storage, cat, track, hash).tas.length, 2);
+    assert.equal(b.pure.length, 1, 'TAS and AI runs never touch the Pure board');
+    assert.equal(getRecord(storage, 'A01', hash).bestMs, 30000, 'or the personal best');
+
+    // Five per board; slower runs fall off, and a run off the board is not stored.
+    for (let i = 0; i < 6; i++) submitBoardRun(storage, cat, track, hash, 'tas', { timeMs: 26000 + i, source: 'quick' });
+    b = getBoards(storage, cat, track, hash);
+    assert.equal(b.tas.length, BOARD_SIZE);
+    assert.deepEqual(b.tas.map((e) => e.timeMs), [24000, 25000, 26000, 26001, 26002]);
+    assert.equal(submitBoardRun(storage, cat, track, hash, 'tas', { timeMs: 99999, source: 'quick' }).rank, 0);
+    assert.throws(() => submitBoardRun(storage, cat, track, hash, 'cheats', { timeMs: 1 }), /Unknown leaderboard/);
+
+    // Another layout of the track hides the old runs (the personal best goes stale too).
+    b = getBoards(storage, cat, track, 'another-layout');
+    assert.deepEqual([b.pure.length, b.tas.length, b.ai.length], [0, 0, 0]);
+    assert.equal(boardLeader(storage, cat, track, 'another-layout', 'tas'), null);
+
+    // Platform tracks rank fewer respawns first, on every board.
+    const plat = { ...track, id: 'plat', mode: 'platform' };
+    submitBoardRun(storage, cat, plat, hash, 'tas', { timeMs: 20000, respawns: 3, source: 'quick' });
+    submitBoardRun(storage, cat, plat, hash, 'tas', { timeMs: 40000, respawns: 0, source: 'quick' });
+    assert.deepEqual(getBoards(storage, cat, plat, hash).tas.map((e) => e.respawns), [0, 3]);
+});
+
+test('leaderboard ghosts: any mix of the three, each in its own colour', () => {
+    const lead = (label) => ({ replay: { inputs: '1:B' }, label });
+    const leaders = { pure: lead('Pure run'), tas: lead('Quick TAS'), ai: lead('ES · gen 3') };
+    const s = defaultSettings();
+    assert.deepEqual(categoryGhosts(s, leaders).map((g) => g.category), ['pure'], 'the best human ghost is on by default');
+    s.showTasGhost = true;
+    s.showAiGhost = true;
+    const all = categoryGhosts(s, leaders);
+    assert.deepEqual(all.map((g) => g.category), ['pure', 'tas', 'ai']);
+    assert.equal(new Set(all.map((g) => g.color)).size, 3, 'three colours');
+    assert.deepEqual(all.map((g) => g.color), [CATEGORY_GHOSTS.pure.color, CATEGORY_GHOSTS.tas.color, CATEGORY_GHOSTS.ai.color]);
+    assert.equal(all[1].label, 'Best TAS · Quick TAS');
+    assert.equal(all[2].label, 'Best AI · ES · gen 3');
+    s.showGhost = false;
+    assert.deepEqual(categoryGhosts(s, { ...leaders, ai: null }).map((g) => g.category), ['tas'], 'no leader, no ghost');
+    // Old saved settings gain the new switches, off.
+    const old = sanitizeSettings({ showGhost: true });
+    assert.deepEqual([old.showGhost, old.showTasGhost, old.showAiGhost], [true, false, false]);
+});
+
+test('storage: a save that hits the quota is read back for the rest of the session', () => {
+    const ls = new Map();
+    let full = false;
+    globalThis.localStorage = {
+        getItem: (k) => (ls.has(k) ? ls.get(k) : null),
+        setItem: (k, v) => {
+            if (full) throw new Error('QuotaExceededError');
+            ls.set(k, String(v));
+        },
+        removeItem: (k) => ls.delete(k),
+    };
+    try {
+        assert.equal(realStorage.set('boards', { a: 1 }), true);
+        full = true;
+        assert.equal(realStorage.set('boards', { a: 2 }), false);
+        assert.deepEqual(realStorage.get('boards'), { a: 2 }, 'not the older copy on disk');
+        full = false;
+        assert.equal(realStorage.set('boards', { a: 3 }), true);
+        assert.deepEqual(realStorage.get('boards'), { a: 3 });
+        assert.equal(ls.get('penguintrack:boards'), '{"a":3}');
+        realStorage.remove('boards');
+        assert.equal(realStorage.get('boards', null), null);
+    } finally {
+        delete globalThis.localStorage;
     }
 });
 

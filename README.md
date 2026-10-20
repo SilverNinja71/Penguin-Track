@@ -58,7 +58,12 @@ To drift on snow or powder, tap the brake while steering hard above 70 km/h.
   autopilot) to validate it and set its medals, then save it to My Tracks and share it as a
   `PT1.` code. See [docs/EDITOR.md](docs/EDITOR.md).
 - **My Tracks.** Your tracks and imported share codes: race, edit, share or delete them.
-- **TAS Studio.** Open any replay (or start from the autopilot) and edit it tick by tick:
+- **TAS: Quick TAS or Pro Studio.** Quick TAS (Race & Rewind) is a normal race with
+  savestates: `C` drops a marker, `R` or `Backspace` rewinds to it, `[` `]` step through
+  your markers, and **Open in Pro Studio** carries the run into the frame-by-frame editor.
+  Every track has three leaderboards, Pure Run, Best TAS and Best AI, and you can race any
+  mix of their ghosts at once.
+- **Pro TAS Studio.** Open any replay (or start from the autopilot) and edit it tick by tick:
   a piano roll for steering and pedals, a script editor, savestates, frame stepping, a
   comparison ghost, record mode at slow motion and a bruteforce search in a worker.
   Validate re-simulates the run from scratch; save it as a replay to watch or share.

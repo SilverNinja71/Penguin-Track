@@ -205,6 +205,15 @@ export class AudioEngine {
         this._carState = makeCarSoundState();
     }
 
+    /**
+     * The car jumped to another moment (a Quick TAS rewind): keep the running
+     * voice, so no second engine ever stacks on the first, and only drop the
+     * gear, shift and throttle smoothing so it follows the restored car at once.
+     */
+    resetCar() {
+        this._carState = makeCarSoundState();
+    }
+
     // ---------------------------------------------------------- events
 
     /**

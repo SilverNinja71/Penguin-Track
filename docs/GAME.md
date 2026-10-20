@@ -177,11 +177,26 @@ All keys are prefixed `penguintrack:` (`js/game/storage.js`).
 
 | key | shape |
 | --- | --- |
-| `settings` | `{ volume: { master, sfx, music }, quality, reducedMotion, camera, showGhost, showEmperorGhost, showSplits, showMinimap, units: 'kmh'|'mph', touchControls: 'auto'|'on'|'off', padSensitivity, padDeadzone, bindings: { [action]: [code, code?] } }` |
-| `records` | `{ [trackId]: { bestMs, respawns, medal, replay, splits, trackHash, date, awarded } }` |
+| `settings` | `{ volume: { master, sfx, music }, quality, reducedMotion, camera, showGhost, showTasGhost, showAiGhost, showEmperorGhost, showSplits, showMinimap, units: 'kmh'|'mph', touchControls: 'auto'|'on'|'off', padSensitivity, padDeadzone, bindings: { [action]: [code, code?] } }` |
+| `records` | `{ [trackId]: { bestMs, respawns, medal, replay, splits, trackHash, date, awarded } }`: the Pure-run personal best |
+| `boards` | `{ [trackId]: { pure: [entry], tas: [entry], ai: [entry] } }`, best first, at most 5 each. `entry: { timeMs, respawns, source: 'race'|'quick'|'studio'|'autopilot'|'lab', label, model?, rewinds?, trackHash, date, replay?, splits? }`; only each board's leader keeps its replay (its ghost) |
+| `tasMode` | `'quick'` (default) or `'pro'`: which TAS page the menu opens |
 | `replays` | `[{ id, name, trackId, trackName, track? /* custom tracks are embedded */, replay, timeMs, respawns, medal, date }]` (newest first, at most 120) |
 | `tracks` | `{ [id]: TrackJSON }` — the key is the track id (the editor writes these; My Tracks imports codes into it with a fresh id when needed, and reads an optional `updated` timestamp) |
 
+- **Three leaderboards per track** (`records.js` `submitBoardRun` / `getBoards`, shown by
+  `leaderboard.js` in the campaign detail panel and on the Quick TAS page):
+  **Pure Run** (unassisted races; the only runs that set `records`, medals and gold),
+  **Best TAS** (Quick TAS runs that used a marker or a rewind, labelled `Quick TAS`, and
+  validated Pro Studio runs, labelled `Studio/Bruteforce`) and **Best AI** (AI Lab
+  generations driven from the start line, labelled with the algorithm, generation and
+  network size, and `?autopilot=1` runs, labelled `Autopilot`). The Pure board also lists
+  the `records` personal best, so runs saved before the boards existed still show. A run
+  with the same time, respawns and source as a listed one is not listed twice.
+- **Ghosts**: `showGhost` (best human), `showTasGhost` and `showAiGhost` switch the three
+  board leaders' ghosts on independently (Settings, the pause menu, or the leaderboard's
+  ghost button); each has its own colour on the track and the minimap
+  (`ghost.js` `CATEGORY_GHOSTS`).
 - A record is replaced when the run is better (`isBetterRun`: time; platform: respawns,
   then time). `medal` is the best medal ever earned there and survives layout changes;
   a record whose `trackHash` differs from the current layout is shown as stale (no time,
@@ -191,7 +206,7 @@ All keys are prefixed `penguintrack:` (`js/game/storage.js`).
   `localStorage.spear_mace_user_profile.gold`: Emperor 60, Gold 30, Silver 15, Bronze 5,
   each tier paid once (going straight to the Emperor pays 110). `awarded` remembers what
   was paid. Guests get nothing marked, so a later run while signed in can still claim it.
-  Custom tracks and `?autopilot=1` runs never pay.
+  Custom tracks and `?autopilot=1` runs never pay (autopilot runs go to the Best AI board).
 
 ### Replay codes
 

@@ -7,6 +7,8 @@ import { h, append, setText, toggleClass, isTypingTarget, loadModuleCss } from '
 import { icon, iconSvg } from '../game/icons.js';
 import { modalOpen } from '../game/ui.js';
 import { decodeReplayText } from '../game/replaycode.js';
+import { submitBoardRun } from '../game/records.js';
+import { verifyReplay } from '../core/replay.js';
 import { buildWorld } from '../core/track.js';
 import { getSamples } from '../core/samples.js';
 import { formatTime } from '../core/format.js';
@@ -688,6 +690,9 @@ class Lab {
                     kind: 'training', name: `${this.track.name || this.track.id} · gen ${stats.generation + 1}`,
                     replay: run.best.replay, track: memo.trackRef, run,
                 };
+                if (run.rc.envConfig.startMode === 'start') {
+                    this.submitAiRun(run.best.replay, `${String(tr.algo || 'AI').toUpperCase()} · gen ${stats.generation + 1}`, `${L.archLabel(run.rc.arch)} net`);
+                }
             }
             const f = this.fieldMeta;
             if (!this.field || f.source !== 'training' || this.field.over) this.showGeneration(run.pending);
@@ -1202,6 +1207,22 @@ class Lab {
         if (memo.driver && memo.driver.kind === 'model' && memo.driver.stored && memo.driver.name === name) memo.driver.stored = false;
         this.renderModels();
         this.renderDriver();
+    }
+
+    /**
+     * A finished AI run from the start line on the track's Best AI board, after
+     * re-simulating it (label: algorithm and generation, model: network size).
+     */
+    submitAiRun(replay, label, model) {
+        if (!replay || !replay.finished || !this.track || !this.track.id || !this.world) return null;
+        const v = verifyReplay(this.world, replay);
+        if (!v.ok) return null;
+        const out = submitBoardRun(this.app.storage, this.app.catalog, this.track, this.world.hash, 'ai', {
+            timeMs: v.timeMs, respawns: v.respawns, replay: { ...replay, name: `${this.track.name || this.track.id} ${label}` }, splits: [],
+            source: 'lab', label, model,
+        });
+        if (out.improved) this.app.toast(`New Best AI on ${this.track.name || this.track.id}: ${formatTime(v.timeMs)}`, { kind: 'good', icon: 'trophy' });
+        return out;
     }
 
     /** The replay to hand to other screens: training runs are re-driven from the start line. */

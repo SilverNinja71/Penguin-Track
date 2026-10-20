@@ -181,7 +181,7 @@ export class Hud {
             this.respEl.innerHTML = `${iconSvg('retry', 16)}<span class="pt-mono">${sim.respawns}</span>`;
         }
         if (view.effects) this._effects(view.effects);
-        if (this.minimap) this.minimap.draw(view.pos, view.quat, opts.ghostPositions || NO_GHOSTS);
+        if (this.minimap) this.minimap.draw(view.pos, view.quat, opts.ghostPositions || NO_GHOSTS, opts.ghostColors || NO_GHOSTS, opts.markers || NO_GHOSTS);
     }
 
     _effects(e) {

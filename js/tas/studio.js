@@ -1,8 +1,10 @@
-// TAS Studio screen: a 3D view of the TAS car (plus an optional comparison
-// ghost) with precise state readouts, a piano-roll timeline, the script
-// editor, savestates, record mode, a bruteforce panel and project management.
-// One TasRunner per open project; the timeline is the source of truth and the
-// script text, the roll and the 3D view all follow it.
+// TAS screen. Two modes (quick-hub.js): Quick TAS (Race & Rewind, the default
+// start page) and the Pro TAS Studio below: a 3D view of the TAS car (plus an
+// optional comparison ghost) with precise state readouts, a piano-roll
+// timeline, the script editor, savestates, record mode, a bruteforce panel and
+// project management. One TasRunner per open project; the timeline is the
+// source of truth and the script text, the roll and the 3D view all follow it.
+// Validated finished runs go on the track's Best TAS board (Studio/Bruteforce).
 import { buildWorld } from '../core/track.js';
 import { snapshotCar, lerpCarSnapshot, verifyReplay } from '../core/replay.js';
 import { runAutopilot } from '../core/autopilot.js';
@@ -12,7 +14,8 @@ import { h, setText, toggleClass, copyText, loadModuleCss } from '../game/dom.js
 import { iconSvg } from '../game/icons.js';
 import { modalOpen } from '../game/ui.js';
 import { GhostRun, makeCarView } from '../game/ghost.js';
-import { allRecords, listReplays, saveReplay } from '../game/records.js';
+import { allRecords, listReplays, saveReplay, submitBoardRun } from '../game/records.js';
+import { QuickHub, tasModeToggle, getTasMode } from './quick-hub.js';
 import { encodeReplayCodeAsync, decodeReplayText } from '../game/replaycode.js';
 import { InputTimeline } from './timeline.js';
 import { parse, serialize, fromReplay, toReplay } from './script.js';
@@ -45,6 +48,10 @@ const EMPTY = new InputTimeline();
 
 // Replay names say TAS once, even for a project that started from a TAS replay.
 const tasName = (name) => (/\bTAS\b/.test(name) ? name : `${name} (TAS)`);
+// A project name from a replay name: no time, and a Quick TAS run becomes 'Quick'
+// ('First Flakes 0:24.97 (Quick TAS)' -> 'First Flakes Quick', then ' TAS' is added).
+const projectBase = (name) => name.replace(/\s*\d+:\d\d\.\d\d\b/, '').replace(/\s*\(Quick TAS\)/, ' Quick')
+    .replace(/\s*\((?:Pure run|Autopilot)\)/, '').trim();
 
 const icon = (name, size = 16) => h('span.pt-ico', { html: iconSvg(name, size) });
 
@@ -107,6 +114,7 @@ class Studio {
         this.resultEl = h('div.tas-result.pt-mono');
         const top = h('header.tas-top',
             B('Back', 'back', () => this.leave(), { cls: 'ghost' }),
+            tasModeToggle(app, 'pro'),
             h('div.tas-titles', this.titleEl, this.trackEl),
             this.resultEl,
             h('div.pt-spacer'),
@@ -288,7 +296,7 @@ class Studio {
                 const track = this.app.catalog.resolve(params.track);
                 if (!track) throw new Error("That track couldn't be found.");
                 const replay = params.replay || null;
-                if (replay) ok = this.newProject(track, { kind: 'replay', replay, name: replay.name ? `${replay.name.replace(/\s*\d+:\d\d\.\d\d\b/, '')} TAS` : null });
+                if (replay) ok = this.newProject(track, { kind: 'replay', replay, name: replay.name ? `${projectBase(replay.name)} TAS` : null });
                 else ok = this.newProject(track, { kind: params.start || 'autopilot' });
             } else if (memo) ok = this.loadData(memo);
         } catch (e) {
@@ -652,17 +660,37 @@ class Studio {
         const same = res.finished === rep.finished && (res.finishTimeMs ?? null) === (rep.timeMs ?? null);
         const ok = v.ok && same;
         this.lastValidation = { ok, finished: rep.finished, timeMs: rep.timeMs, studioMs: res.finishTimeMs, verify: v.ok, reason: v.reason, ms };
+        const board = ok && rep.finished ? this.submitToBoard(rep, world) : null;
         const lines = [
             rep.finished ? `Finish ${formatTime(rep.timeMs, { style: 'long' })} (${rep.ticks} ticks${v.respawns ? `, ${v.respawns} respawns` : ''})` : `Does not finish (ran ${formatTime(rep.ticks * 10)})`,
             same ? 'Matches the studio run exactly.' : `Differs from the studio run (${formatTime(res.finishTimeMs)}).`,
             v.ok ? 'verifyReplay: ok' : `verifyReplay: ${v.reason}`,
             `${ms.toFixed(0)} ms from scratch`,
         ];
+        if (board && board.rank) lines.push(board.improved ? 'New Best TAS on this track!' : `#${board.rank} on the Best TAS board`);
         this.app.modal((close) => h('div.pt-col',
             h('h2.pt-subtitle', ok ? (rep.finished ? 'Valid run' : 'Consistent, but no finish') : 'Validation failed'),
             h('ul.tas-validate', lines.map((l, i) => h('li', { class: i < 3 ? (i === 0 ? '' : (i === 1 ? same : v.ok) ? 'good' : 'bad') : 'pt-muted' }, l))),
             h('div.pt-row.pt-modal-actions', h('button.pt-btn.primary', { type: 'button', 'data-autofocus': true, onclick: () => close(true) }, 'OK'))), { label: 'Validation' });
         return this.lastValidation;
+    }
+
+    /**
+     * A verified finished run on the track's Best TAS board, labelled
+     * Studio/Bruteforce. Returns submitBoardRun's outcome (or null).
+     */
+    submitToBoard(rep, world = this.world) {
+        try {
+            const out = submitBoardRun(this.app.storage, this.app.catalog, this.track, world.hash, 'tas', {
+                timeMs: rep.timeMs, respawns: rep.respawnTicks.length, replay: { ...rep, name: tasName(this.name) }, splits: [],
+                source: 'studio', label: 'Studio/Bruteforce',
+            });
+            if (out.improved) this.toast(`New Best TAS: ${formatTime(rep.timeMs)}`, { kind: 'good', icon: 'trophy' });
+            return out;
+        } catch (e) {
+            console.warn('[tas] leaderboard skipped:', e.message);
+            return null;
+        }
     }
 
     watch() {
@@ -681,6 +709,8 @@ class Studio {
             medal: cat.medalFor(this.track, { timeMs: rep.timeMs, respawns: rep.respawnTicks.length }),
         });
         if (!entry) return this.toast('Storage is full: delete some replays first.', { kind: 'bad' });
+        const world = buildWorld(this.track);
+        if (verifyReplay(world, rep).ok) this.submitToBoard(rep, world);
         return this.toast('Saved to Replays', { icon: 'save' });
     }
 
@@ -1361,22 +1391,39 @@ class Studio {
 const studio = {
     id: 'tas',
     studio: null,
+    hub: null,
 
+    /**
+     * params.pro (or anything to open: track, project, resume) opens the Pro
+     * Studio, params.quick the Quick TAS start page (select: track id);
+     * otherwise the mode the player picked last (Quick TAS at first).
+     */
     async enter(app, params = {}) {
+        params = params || {};
         await loadModuleCss('tas');
         app.setMusic(false);
+        const pro = params.pro || params.track || params.project || params.resume;
+        const mode = pro ? 'pro' : params.quick ? 'quick' : getTasMode(app.storage);
+        if (mode === 'quick') {
+            this.hub = new QuickHub(app);
+            this.hub.open(params);
+            return;
+        }
         this.studio = new Studio(app);
-        await this.studio.open(params || {});
+        await this.studio.open(params);
     },
 
     exit() {
         if (this.studio) this.studio.dispose();
+        if (this.hub) this.hub.dispose();
         this.studio = null;
+        this.hub = null;
     },
 
     // Gamepad B / shell back: same as the Back button (asks about unsaved changes).
     back() {
         if (this.studio) this.studio.leave();
+        else if (this.hub) this.hub.back();
     },
 };
 

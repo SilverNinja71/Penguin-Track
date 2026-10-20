@@ -1,16 +1,21 @@
 // A race on one track: countdown, 100 Hz simulation driven by the controls (or
 // the core Autopilot with ?autopilot=1), input recording, ghosts, HUD, pause
-// menu, respawn/restart, and the hand-off to the results screen.
+// menu, respawn/restart, and the hand-off to the results screen. With
+// params.quickTas the race is a Quick TAS run (Race & Rewind): savestate markers
+// (js/tas/quick.js) the player can drop, rewind to and cycle through. Finished
+// runs go to the track's Pure, TAS or AI leaderboard (records.js).
 import { Sim } from '../core/sim.js';
 import { Recorder, snapshotCar, lerpCarSnapshot } from '../core/replay.js';
 import { Autopilot } from '../core/autopilot.js';
 import { formatTime } from '../core/format.js';
-import { h } from './dom.js';
+import { TICK_MS } from '../core/constants.js';
+import { QuickTas } from '../tas/quick.js';
+import { h, setText, toggleClass } from './dom.js';
 import { iconSvg } from './icons.js';
 import { Hud } from './hud.js';
-import { GhostRun, makeCarView } from './ghost.js';
-import { getRecord, submitRun, awardMedalGold } from './records.js';
-import { CAMERAS } from './settings.js';
+import { GhostRun, makeCarView, categoryGhosts, CATEGORY_GHOSTS, EMPEROR_GHOST } from './ghost.js';
+import { getRecord, submitRun, awardMedalGold, submitBoardRun, boardLeader } from './records.js';
+import { CAMERAS, keyLabel } from './settings.js';
 import { openQuickSettings } from './settings-screen.js';
 import { modalOpen } from './ui.js';
 
@@ -32,7 +37,9 @@ export class RaceSession {
         this.prev = null;
         this.cur = null;
         this.view = makeCarView();
-        this.hudOpts = { ghostPositions: [] };   // reused every frame
+        this.quick = !!params.quickTas;
+        this.markerList = [];                    // Quick TAS flags: rebuilt on marker changes only
+        this.hudOpts = { ghostPositions: [], ghostColors: [], markers: this.markerList };   // reused every frame
         this.state = 'countdown';
         this.cd = 0;
         this.finishTicks = 0;
@@ -51,6 +58,7 @@ export class RaceSession {
         this.sim = new Sim(world);
         this.recorder = new Recorder();
         this.pilot = app.debug.autopilot ? new Autopilot(world) : null;
+        this.qt = this.quick && !this.pilot ? new QuickTas(this.sim, this.recorder) : null;
         this.record = this.saves || this.mode === 'test' ? getRecord(app.storage, track.id, world.hash) : null;
         this._buildGhosts();
         this.hud = new Hud(app, {
@@ -63,6 +71,7 @@ export class RaceSession {
         });
         this.screenEl.appendChild(this.hud.el);
         if (this.pilot) this.screenEl.appendChild(h('div.play-autopilot', h('span.pt-ico', { html: iconSvg('brain', 16) }), 'Autopilot driving'));
+        if (this.qt) this.screenEl.appendChild(this._buildQuickTas());
         this.pauseEl = this._buildPause();
         this.screenEl.appendChild(this.pauseEl);
         this.cur = snapshotCar(this.sim.car);
@@ -70,6 +79,7 @@ export class RaceSession {
         this._applyCamera();
         app.setMusic(false);
         app.controls.setActive(true);
+        app.controls.setTasMode(!!this.qt);
         this._onVis = () => {
             if (document.hidden && (this.state === 'racing' || this.state === 'countdown')) this.pause();
         };
@@ -92,16 +102,21 @@ export class RaceSession {
             if (!replay || (replay.trackHash && replay.trackHash !== world.hash)) return;
             try {
                 const run = new GhostRun(world, replay, { label, kind });
-                // Name tags only on other people's ghosts: your own PB and the Emperor start
-                // on top of you, and their colours already tell them apart.
-                const car = app.renderer.addCar({ kind: 'ghost', color, label: kind === 'extra' ? label : '' });
-                this.ghosts.push({ run, car, kind });
+                // Name tags on every ghost but your own PB and the Emperor: those start on
+                // top of you, and their colours already tell them apart.
+                const car = app.renderer.addCar({ kind: 'ghost', color, label: kind === 'pb' || kind === 'emperor' ? '' : label });
+                this.ghosts.push({ run, car, kind, color });
             } catch (e) {
                 console.warn('[penguintrack] ghost skipped:', e.message);
             }
         };
-        if (app.settings.showGhost && this.record && this.record.replay) add(this.record.replay, 'Personal best', 'pb', '#cfeaff');
-        if (app.settings.showEmperorGhost) add(app.catalog.authorReplay(track.id), 'Emperor', 'emperor', '#6fd3ff');
+        // The leaderboard ghosts (best human, best TAS, best AI), each switched on on its own.
+        if (this.saves || this.mode === 'test') {
+            const lead = (c) => boardLeader(app.storage, app.catalog, track, world.hash, c);
+            const leaders = { pure: lead('pure'), tas: lead('tas'), ai: lead('ai') };
+            for (const g of categoryGhosts(app.settings, leaders)) add(g.replay, g.label, g.category === 'pure' ? 'pb' : g.category, g.color);
+        }
+        if (app.settings.showEmperorGhost) add(app.catalog.authorReplay(track.id), EMPEROR_GHOST.label, 'emperor', EMPEROR_GHOST.color);
         for (const g of this.params.ghosts || []) {
             const replay = g && g.replay ? g.replay : g;
             add(replay, (g && g.label) || replay.name || 'Ghost', 'extra', (g && g.color) || '#ffd54a');
@@ -128,6 +143,10 @@ export class RaceSession {
         sim.reset();
         this.recorder.clear();
         if (this.pilot) this.pilot.reset();
+        if (this.qt) {
+            this.qt.begin();
+            this._qtSync();
+        }
         this.state = 'countdown';
         this.cd = 0;
         this.finishTicks = 0;
@@ -186,7 +205,8 @@ export class RaceSession {
         if (events.length) this._events(events);
         if (this.state === 'finished' || this.state === 'stage') {
             this.finishTicks++;
-            if (this.finishTicks === FINISH_HOLD && this.state === 'finished') this.toResults();
+            // Quick TAS waits on the line: rewind to keep driving, or Enter for the results.
+            if (this.finishTicks === FINISH_HOLD && this.state === 'finished' && !this.qt) this.toResults();
         }
     }
 
@@ -235,32 +255,149 @@ export class RaceSession {
         if (this.state !== 'stage') app.audio.handleEvents(sound);
     }
 
+    /** Which leaderboard this run belongs to: 'ai' (autopilot), 'tas' (any marker or rewind) or 'pure'. */
+    category() {
+        if (this.pilot) return 'ai';
+        return this.qt && this.qt.used ? 'tas' : 'pure';
+    }
+
     _finish(ev) {
         const { app, sim, track, world } = this;
         this.state = 'finished';
         this.finishTicks = 0;
-        const replay = this.recorder.toReplay({ sim, name: `${track.name} ${formatTime(ev.timeMs)}`, date: Date.now() });
+        const category = this.category();
+        const label = category === 'tas' ? 'Quick TAS' : category === 'ai' ? 'Autopilot' : 'Pure run';
+        const suffix = category === 'pure' ? '' : ` (${label})`;
+        const replay = this.recorder.toReplay({ sim, name: `${track.name} ${formatTime(ev.timeMs)}${suffix}`, date: Date.now() });
         this.result = {
             finished: true, timeMs: ev.timeMs, respawns: sim.respawns,
             splits: sim.checkpointTimes.slice(), lapTimes: sim.lapTimes.slice(), replay,
-            autopilot: !!this.pilot,
+            autopilot: !!this.pilot, category, label,
+            rewinds: this.qt ? this.qt.rewinds : 0, markers: this.qt ? this.qt.placed : 0,
         };
         let pbBefore = this.record;
+        this.outcome = null;
+        this.board = null;
         if (this.saves) {
-            this.outcome = submitRun(app.storage, app.catalog, track, world.hash, this.result);
-            pbBefore = this.outcome.previous;
-            this.newRecord = this.outcome.improved;
-            // Debug autopilot runs keep their records but never earn gold.
-            if (this.outcome.firstMedal && !this.pilot) {
-                const paid = awardMedalGold(app.storage, app.catalog, track.id, this.outcome.medal);
-                if (paid) this.outcome.gold = paid;
+            const run = { ...this.result, source: category === 'tas' ? 'quick' : category === 'ai' ? 'autopilot' : 'race', label };
+            if (category === 'pure') {
+                // The board first: it lists the personal best too, so after submitRun this run would look listed already.
+                this.board = submitBoardRun(app.storage, app.catalog, track, world.hash, 'pure', run);
+                // Only Pure runs set the personal best and earn medals and gold.
+                this.outcome = submitRun(app.storage, app.catalog, track, world.hash, this.result);
+                pbBefore = this.outcome.previous;
+                this.newRecord = this.outcome.improved;
+                if (this.outcome.firstMedal) {
+                    const paid = awardMedalGold(app.storage, app.catalog, track.id, this.outcome.medal);
+                    if (paid) this.outcome.gold = paid;
+                }
+            } else {
+                this.board = submitBoardRun(app.storage, app.catalog, track, world.hash, category, run);
+                const prev = this.board.previous;
+                pbBefore = prev ? { bestMs: prev.timeMs, respawns: prev.respawns || 0, splits: prev.splits || null } : null;
+                // A new best TAS / AI run becomes that board's ghost after a restart.
+                this.newRecord = this.board.improved;
             }
+            if (!this.board.saved) app.toast('Storage is full: this run is only kept until you close the page.', { kind: 'bad', ms: 4000 });
         }
         this.result.pbBefore = pbBefore;
+        this.result.board = this.board ? { category, rank: this.board.rank, improved: this.board.improved } : { category, rank: 0, improved: false };
         const diff = pbBefore && Number.isFinite(pbBefore.bestMs) ? ev.timeMs - pbBefore.bestMs : null;
-        const text = diff == null ? formatTime(ev.timeMs) : `${formatTime(ev.timeMs)}  ${formatTime(diff, { style: 'short', sign: true })}`;
+        let text = diff == null ? formatTime(ev.timeMs) : `${formatTime(ev.timeMs)}  ${formatTime(diff, { style: 'short', sign: true })}`;
+        if (this.qt) text += `   ${this._key('tasRewind')} rewind · ${this._key('respawn')} results`;
         this.hud.banner(text, 'finish ' + (diff == null ? '' : diff <= 0 ? 'ahead' : 'behind'), 0);
         if (typeof this.params.onFinish === 'function') this.params.onFinish(this.result, this);
+    }
+
+    /** First key bound to an action, for on-screen hints. */
+    _key(action) {
+        const keys = this.app.settings.bindings[action] || [];
+        return keys.length ? keyLabel(keys[0]) : '—';
+    }
+
+    /** The restart key that still restarts in Quick TAS (Backspace rewinds there), or ''. */
+    _restartKey() {
+        const b = this.app.settings.bindings;
+        const tas = new Set([...(b.tasMark || []), ...(b.tasRewind || []), ...(b.tasPrev || []), ...(b.tasNext || [])]);
+        const code = (b.restart || []).find((k) => !tas.has(k));
+        return code ? keyLabel(code) : '';
+    }
+
+    // ------------------------------------------------------------- Quick TAS
+
+    _buildQuickTas() {
+        const k = (action) => h('span.pt-kbd', this._key(action));
+        this.qtState = h('div.qt-state');
+        this.qtInfo = h('div.qt-info.pt-mono');
+        this.qtEl = h('div.play-quicktas.pt-panel', { role: 'status', 'aria-live': 'polite' },
+            h('div.qt-head', h('span.pt-ico', { html: iconSvg('tas', 16) }), h('b', 'Quick TAS'), this.qtState),
+            this.qtInfo,
+            h('div.qt-keys.pt-muted', k('tasMark'), ' mark  ', k('tasRewind'), ' rewind  ', k('tasPrev'), k('tasNext'), ' markers'));
+        return this.qtEl;
+    }
+
+    /** Flags, minimap markers and the Quick TAS panel after any marker change (never per frame). */
+    _qtSync() {
+        const qt = this.qt;
+        if (!qt) return;
+        const list = this.markerList;
+        list.length = 0;
+        // The Start marker needs no flag: the start gate is right there.
+        for (let i = 1; i < qt.markers.length; i++) {
+            const m = qt.markers[i];
+            list.push({ pos: m.pos, quat: m.quat, current: i === qt.current });
+        }
+        this.app.renderer.setTasMarkers(list);
+        if (!this.qtEl) return;
+        const n = qt.markers.length - 1;
+        const at = qt.marker;
+        setText(this.qtInfo, n === 0 ? 'No markers yet'
+            : qt.current === 0 ? `At the start · ${n} marker${n === 1 ? '' : 's'}`
+                : `Marker ${qt.current}/${n} · ${formatTime(at.tick * TICK_MS)}`);
+        setText(this.qtState, qt.used ? `TAS run · ${qt.rewinds} rewind${qt.rewinds === 1 ? '' : 's'}` : 'Pure so far');
+        toggleClass(this.qtEl, 'used', qt.used);
+    }
+
+    _qtMark() {
+        const m = this.qt.mark();
+        if (!m) {
+            this.hud.banner(this.sim.finished ? 'Finished: rewind to keep driving' : 'A marker is already here', 'bad', 1200);
+            return;
+        }
+        this.app.audio.ui('click');
+        this.hud.banner(`Marker ${this.qt.current} · ${formatTime(m.tick * TICK_MS)}`, 'lap', 1100);
+        this._qtSync();
+    }
+
+    /** dir 0: back to the current marker (R); -1 / 1: the previous / next marker ([ and ]). */
+    _qtJump(dir) {
+        const { app, sim, qt } = this;
+        const m = dir === 0 ? qt.rewind() : qt.cycle(dir);
+        if (!m) return;
+        if (this.state === 'finished') {
+            this.state = 'racing';
+            this.result = null;
+            this.outcome = null;
+            this.finishTicks = 0;
+        }
+        this.respawnQueued = false;
+        // Nothing of the abandoned attempt may linger: no interpolation streak, camera
+        // easing, skid marks, particles or engine smoothing from the other moment.
+        snapshotCar(sim.car, this.cur);
+        snapshotCar(sim.car, this.prev);
+        this.car.teleported();
+        app.renderer.resetEffects();
+        app.audio.resetCar();
+        this.hud.hideSplit();
+        this.hud.banner(qt.current === 0 ? 'Back to the start' : `Rewound to marker ${qt.current} · ${formatTime(m.tick * TICK_MS)}`, 'lap', 1100);
+        this._qtSync();
+    }
+
+    /** Hands the inputs recorded so far to the Pro TAS Studio's frame-by-frame editor. */
+    openInStudio() {
+        const { app, sim, track } = this;
+        const replay = this.recorder.toReplay({ sim, name: `${track.name || track.id} Quick`, date: Date.now() });
+        app.goto('tas', { pro: true, track, replay, onExit: () => app.goto('tas', { quick: true, select: track.id }) });
     }
 
     /** Shows the results; the 3D view keeps running behind them (stage hand-off). */
@@ -268,6 +405,7 @@ export class RaceSession {
         if (this.disposed || !this.result) return;
         this.handoff = true;
         this.state = 'stage';
+        this.app.controls.setTasMode(false);
         this.app.audio.stopCar();
         const stage = this._makeStage();
         this.app.goto('results', {
@@ -301,14 +439,16 @@ export class RaceSession {
         lerpCarSnapshot(this.prev, this.cur, a, this.view);
         this.car.setPose(this.prev, this.cur, a);
         const gt = sim.tick > 0 ? sim.tick - 1 + a : 0;
-        const gpos = this.hudOpts.ghostPositions;
+        const gpos = this.hudOpts.ghostPositions, gcol = this.hudOpts.ghostColors;
         gpos.length = 0;
+        gcol.length = 0;
         for (const g of this.ghosts) {
             g.car.setVisible(this.ghostsOn);
             if (!this.ghostsOn) continue;
             const v = g.run.viewAt(gt);
             g.car.setPose(v, v, 1);
             gpos.push(v.pos);
+            gcol.push(g.color);
         }
         if (!stageOnly) this.hud.update(sim, this.view, this.hudOpts);
         if (this.state !== 'paused' && !stageOnly) app.audio.updateCar(this.view, dt, this.state === 'racing' ? sim.lastInput : null);
@@ -338,6 +478,16 @@ export class RaceSession {
         if (this.state === 'finished' && c.pressed('respawn')) {
             this.toResults();
             return;
+        }
+        if (this.qt) {
+            // Read every Quick TAS edge each frame, so a press during the countdown is dropped, not stored.
+            const mark = c.pressed('tasMark'), back = c.pressed('tasRewind'), prev = c.pressed('tasPrev'), next = c.pressed('tasNext');
+            if (this.state === 'racing' || this.state === 'finished') {
+                if (mark) this._qtMark();
+                if (back) this._qtJump(0);
+                else if (prev) this._qtJump(-1);
+                else if (next) this._qtJump(1);
+            }
         }
         if (this.state === 'countdown') c.pressed('respawn');
         if (c.pressed('camera1')) this._setCamera(0);
@@ -390,16 +540,36 @@ export class RaceSession {
         const quitLabel = this.params.exitLabel || (this.mode === 'test' ? 'Back to editor' : 'Quit');
         const btn = (label, iconName, onclick, cls = '', keys = null) => h('button.pt-btn.big', { type: 'button', class: cls, onclick, 'data-autofocus': cls === 'primary' || null },
             h('span.pt-ico', { html: iconSvg(iconName, 22) }), label, keys ? h('span.pt-kbd', keys) : null);
+        // Any mix of the three leaderboard ghosts, each in its own colour.
+        const settings = this.app.settings;
+        const ghostChip = (category) => {
+            const g = CATEGORY_GHOSTS[category];
+            const b = h('button.pt-btn.small.play-ghost-chip', {
+                type: 'button', style: { '--ghost': g.color }, 'aria-pressed': String(!!settings[g.setting]),
+                onclick: () => {
+                    settings[g.setting] = !settings[g.setting];
+                    b.setAttribute('aria-pressed', String(settings[g.setting]));
+                    this.app.saveSettings();
+                    this._buildGhosts();
+                },
+            }, h('span.play-ghost-dot'), g.label);
+            return b;
+        };
+        const restartKey = this.qt ? this._restartKey() : '⌫';
         return h('div.play-pause.pt-hidden', { role: 'dialog', 'aria-label': 'Paused' },
             h('div.pt-panel.play-pause-panel',
-                h('div.play-pause-head', h('h2.pt-title', 'Paused'), h('div.pt-muted', this.track.name)),
+                h('div.play-pause-head', h('h2.pt-title', 'Paused'), h('div.pt-muted', this.qt ? `${this.track.name} · Quick TAS` : this.track.name)),
                 h('div.pt-col',
                     btn('Resume', 'play', () => this.resume(), 'primary', 'Esc'),
-                    btn('Restart', 'retry', () => this.restart(), '', '⌫'),
+                    btn(this.qt ? 'Restart (clears markers)' : 'Restart', 'retry', () => this.restart(), '', restartKey || null),
+                    this.qt ? btn('Open in Pro Studio', 'tas', () => this.openInStudio()) : null,
                     btn('Settings', 'gear', () => openQuickSettings(this.app)),
                     btn(quitLabel, 'back', () => this.quit(), 'ghost')),
+                h('div.play-ghosts', h('span.pt-muted', 'Ghosts'), ghostChip('pure'), ghostChip('tas'), ghostChip('ai')),
                 h('div.play-pause-hint.pt-muted',
-                    h('span.pt-kbd', 'Enter'), ' respawn  ', h('span.pt-kbd', '1 2 3'), ' cameras  ', h('span.pt-kbd', 'G'), ' ghosts')));
+                    h('span.pt-kbd', 'Enter'), ' respawn  ', h('span.pt-kbd', '1 2 3'), ' cameras  ', h('span.pt-kbd', 'G'), ' ghosts',
+                    this.qt ? [h('br'), h('span.pt-kbd', this._key('tasMark')), ' mark  ', h('span.pt-kbd', this._key('tasRewind')), ' rewind  ',
+                        h('span.pt-kbd', this._key('tasPrev')), h('span.pt-kbd', this._key('tasNext')), ' cycle markers'] : null)));
     }
 
     /** Leaves the race (pause menu Quit): onExit when given, else back where it came from. */
@@ -418,7 +588,9 @@ export class RaceSession {
         if (this.handoff && !force) return;   // the results screen owns the stage now
         this.disposed = true;
         document.removeEventListener('visibilitychange', this._onVis);
+        this.app.controls.setTasMode(false);
         const r = this.app.renderer;
+        r.setTasMarkers(null);
         for (const g of this.ghosts || []) r.removeCar(g.car);
         if (this.car) r.removeCar(this.car);
         this.app.audio.stopCar();

@@ -1,13 +1,33 @@
-// Personal bests ('records'), saved replays ('replays') and first-time medal gold.
+// Personal bests ('records'), the three-category track leaderboards ('boards'),
+// saved replays ('replays') and first-time medal gold.
 //
 // records: { [trackId]: { bestMs, medal, respawns, replay, date, trackHash, splits, awarded } }
+//   The Pure-run personal best: the only runs that earn medals and gold.
 //   medal    best medal ever earned on the track (kept even if the layout changes)
 //   awarded  best medal whose gold went to the shared site account
+// boards: { [trackId]: { pure: [entry], tas: [entry], ai: [entry] } }, best first,
+//   at most BOARD_SIZE each. entry: { timeMs, respawns, source, label, model?,
+//   rewinds?, trackHash, date, replay?, splits? }. Only each board's leader keeps
+//   its replay (its ghost); the rest are times, so the boards stay small.
+//   pure  unassisted human runs (race.js, no savestates or TAS tools)
+//   tas   Quick TAS (savestate rewinds) or Pro TAS Studio / bruteforce runs
+//   ai    AI Lab drivers (js/ai) and the core autopilot
 // replays: [{ id, name, trackId, trackName, track?, replay, timeMs, respawns, medal, date }]
 //   `track` is embedded for custom tracks so the replay stays watchable.
 import { currentAccount, addGold } from './account.js';
 
 const MAX_REPLAYS = 120;
+export const BOARD_CATEGORIES = ['pure', 'tas', 'ai'];
+export const BOARD_SIZE = 5;
+export const CATEGORY_INFO = {
+    pure: { label: 'Pure Run', short: 'Human', hint: 'Unassisted runs: no savestates, no TAS tools.' },
+    tas: { label: 'Best TAS', short: 'TAS', hint: 'Quick TAS rewinds or the Pro TAS Studio.' },
+    ai: { label: 'Best AI', short: 'AI', hint: 'AI Lab drivers and the autopilot.' },
+};
+/** What made a run: shown on the boards, results and ghost name tags. */
+export const SOURCE_LABELS = {
+    race: 'Pure run', quick: 'Quick TAS', studio: 'Studio/Bruteforce', autopilot: 'Autopilot', lab: 'AI Lab',
+};
 
 export function allRecords(storage) {
     const r = storage.get('records', {});
@@ -128,4 +148,101 @@ export function renameReplay(storage, id, name) {
         r.name = name;
         storage.set('replays', list);
     }
+}
+
+// ------------------------------------------------------------------ boards
+
+function allBoards(storage) {
+    const b = storage.get('boards', {});
+    return b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+}
+
+function cleanEntry(e) {
+    return e && typeof e === 'object' && Number.isFinite(e.timeMs) ? e : null;
+}
+
+/** Display label of a board entry: 'Quick TAS', 'Studio/Bruteforce', 'ES · gen 12', 'Pure run'… */
+export function entryLabel(e) {
+    if (!e) return '';
+    if (e.label) return e.label;
+    return SOURCE_LABELS[e.source] || '';
+}
+
+/**
+ * The three leaderboards of a track, best first: { pure, tas, ai }. With a
+ * layout hash, runs made on another layout are left out. The Pure board also
+ * lists the personal best from 'records' (runs saved before the boards existed).
+ */
+export function getBoards(storage, cat, track, hash = null) {
+    const raw = allBoards(storage)[track.id] || {};
+    const fresh = (e) => !hash || !e.trackHash || e.trackHash === hash;
+    const out = {};
+    for (const c of BOARD_CATEGORIES) {
+        out[c] = (Array.isArray(raw[c]) ? raw[c] : []).map(cleanEntry).filter((e) => e && fresh(e));
+    }
+    const rec = getRecord(storage, track.id, hash);
+    if (rec && Number.isFinite(rec.bestMs) && !out.pure.some((e) => e.timeMs === rec.bestMs && (e.respawns || 0) === (rec.respawns || 0))) {
+        out.pure.push({
+            timeMs: rec.bestMs, respawns: rec.respawns || 0, source: 'race', label: 'Pure run',
+            trackHash: rec.trackHash || hash, date: rec.date || null, replay: rec.replay || null, splits: rec.splits || [],
+        });
+        sortBoard(cat, track, out.pure);
+        if (out.pure.length > BOARD_SIZE) out.pure.length = BOARD_SIZE;
+    }
+    return out;
+}
+
+function sortBoard(cat, track, list) {
+    list.sort((a, b) => (cat.isBetterRun(track, a, b) ? -1 : cat.isBetterRun(track, b, a) ? 1 : (a.date || 0) - (b.date || 0)));
+}
+
+/** The leader of one board with its replay (for its ghost), or null. */
+export function boardLeader(storage, cat, track, hash, category) {
+    const top = (getBoards(storage, cat, track, hash)[category] || [])[0];
+    return top && top.replay ? top : null;
+}
+
+/**
+ * Adds a finished run to a track's board. run = { timeMs, respawns, replay,
+ * splits, source, label?, model?, rewinds? }. Runs from another layout are
+ * dropped from the board first, and a run matching a listed one (same time,
+ * respawns and source) is not listed twice. Returns { category, previous (the
+ * old leader or null), improved (new leader), rank (1-based, 0 = off the
+ * board), entry, saved (false when storage was full), duplicate? }.
+ */
+export function submitBoardRun(storage, cat, track, hash, category, run) {
+    if (!BOARD_CATEGORIES.includes(category)) throw new Error(`Unknown leaderboard '${category}'`);
+    const all = allBoards(storage);
+    const boards = all[track.id] && typeof all[track.id] === 'object' ? all[track.id] : {};
+    const current = getBoards(storage, cat, track, hash)[category];
+    const previous = current[0] || null;
+    const entry = {
+        timeMs: run.timeMs,
+        respawns: run.respawns || 0,
+        source: run.source || (category === 'pure' ? 'race' : category === 'tas' ? 'studio' : 'lab'),
+        label: run.label || SOURCE_LABELS[run.source] || '',
+        trackHash: hash,
+        date: Date.now(),
+        replay: run.replay || null,
+        splits: run.splits || [],
+    };
+    if (run.model) entry.model = String(run.model).slice(0, 60);
+    if (entry.source === 'quick' && Number.isFinite(run.rewinds)) entry.rewinds = run.rewinds;
+    // The same result from the same tool again (Validate twice, a replayed run) is already listed.
+    const same = current.find((e) => e.timeMs === entry.timeMs && (e.respawns || 0) === entry.respawns && e.source === entry.source);
+    if (same) return { category, previous, improved: false, rank: current.indexOf(same) + 1, entry: same, saved: true, duplicate: true };
+    const list = current.concat([entry]);
+    sortBoard(cat, track, list);
+    const rank = list.indexOf(entry) + 1;
+    if (list.length > BOARD_SIZE) list.length = BOARD_SIZE;
+    const onBoard = rank <= BOARD_SIZE;
+    // Only the leader keeps its replay (and splits): it is the ghost to race.
+    const stored = list.map((e, i) => (i === 0 ? e : { ...e, replay: null, splits: undefined }));
+    let saved = true;
+    if (onBoard) {
+        boards[category] = stored;
+        all[track.id] = boards;
+        saved = storage.set('boards', all) !== false;
+    }
+    return { category, previous, improved: rank === 1, rank: onBoard ? rank : 0, entry, saved };
 }

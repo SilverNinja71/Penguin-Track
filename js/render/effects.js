@@ -1,7 +1,7 @@
 // Visual effects: falling snow around the camera, wheel snow spray and ice
 // sparkle, skid ribbons, boost trails, landing puffs, wall-hit ice shards,
-// checkpoint pulse rings, the respawn flash, finish confetti-snow and the
-// player's headlights. Particles are CPU-simulated into two pooled Points
+// checkpoint pulse rings, the respawn flash, finish confetti-snow, the
+// player's headlights and Quick TAS savestate flags. Particles are CPU-simulated into two pooled Points
 // buffers (soft and additive); randomness is seeded so frames are repeatable.
 import * as THREE from 'three';
 import { flakeTexture, skidTexture, EFFECT_COLORS, rngOf } from './textures.js';
@@ -271,6 +271,7 @@ export class Effects {
         this.trails = new Map();      // car -> per-wheel ribbon state
         this._exhaust = new Map();    // car -> last exhaust positions (boost trail)
         this.headlightCar = null;
+        this._markers = [];
         this._build();
     }
 
@@ -318,6 +319,20 @@ export class Effects {
         this.group.add(this.flash);
         this.flashT = 0;
 
+        // Quick TAS savestate flags: a pole, a pennant and a ring on the snow, pooled.
+        // One geometry and material set shared by every flag.
+        this.flags = [];
+        this.flagPoleGeo = new THREE.CylinderGeometry(0.1, 0.1, 5, 6).translate(0, 2.5, 0);
+        this.flagClothGeo = new THREE.BufferGeometry();
+        this.flagClothGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 4.95, 0, 0, 3.45, 0, 2.3, 4.2, 0], 3));
+        const flagMat = (color, opacity) => new THREE.MeshBasicMaterial({
+            color, transparent: opacity < 1, opacity, side: THREE.DoubleSide, depthWrite: opacity >= 1, toneMapped: false,
+        });
+        this.flagMats = {
+            pole: flagMat(0xe8f6ff, 1), cloth: flagMat(0x7fdcff, 1), current: flagMat(0xffd54a, 1),
+            ring: flagMat(0x7fdcff, 0.45), ringCurrent: flagMat(0xffd54a, 0.6),
+        };
+
         // Player headlights (night moods).
         this.spot = new THREE.SpotLight(0xfff1d6, 0, 80, 0.48, 0.65, 1.5);
         this.spot.visible = false;
@@ -334,6 +349,7 @@ export class Effects {
         this._build();
         if (car) this.attachHeadlight(car);
         this.setMood(this.mood, this.preset);
+        this.setMarkers(this._markers);
     }
 
     setMood(mood, preset) {
@@ -374,15 +390,65 @@ export class Effects {
         this._exhaust.delete(car);
     }
 
+    /** A new world: no particles, skid marks, trails, flashes or savestate flags. */
     reset() {
+        this.clearTransient();
+        this.setMarkers(null);
+    }
+
+    /**
+     * Drops what the last moments left behind (particles, skid ribbons, boost
+     * trails, pulse rings, the flash): a savestate rewind starts clean. Pools are
+     * emptied, never reallocated, and the savestate flags stay.
+     */
+    clearTransient() {
         this.soft.clear();
         this.glow.clear();
         this.skids.clear();
         this.trails.clear();
         this._exhaust.clear();
+        if (this.pendingRespawn) this.pendingRespawn.clear();
         for (const r of this.rings) r.mesh.visible = false;
         this.flashT = 0;
         this.flash.visible = false;
+    }
+
+    /**
+     * Quick TAS savestate flags: list = [{ pos, quat, current }] (car position
+     * and orientation at the marker; the current one is gold). null or [] hides
+     * them. Meshes are pooled, so calling it on every marker change is cheap.
+     */
+    setMarkers(list) {
+        this._markers = list || [];
+        const n = this._markers.length;
+        for (let i = 0; i < n; i++) {
+            const m = this._markers[i];
+            let f = this.flags[i];
+            if (!f) {
+                const ring = new THREE.Mesh(this.ringGeo, this.flagMats.ring);
+                ring.rotation.x = -Math.PI / 2;
+                ring.scale.setScalar(2.2);
+                ring.position.y = 0.05;
+                const pole = new THREE.Mesh(this.flagPoleGeo, this.flagMats.pole);
+                const cloth = new THREE.Mesh(this.flagClothGeo, this.flagMats.cloth);
+                const group = new THREE.Group();
+                group.name = 'tas-marker';
+                group.add(ring, pole, cloth);
+                group.renderOrder = 5;
+                this.group.add(group);
+                f = { group, cloth, ring };
+                this.flags.push(f);
+            }
+            const q = m.quat;
+            // Heading on the ground: car-local +Z turned by its orientation.
+            const fx = 2 * (q[0] * q[2] + q[3] * q[1]), fz = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
+            f.group.position.set(m.pos[0], m.pos[1] - 0.45, m.pos[2]);
+            f.group.rotation.set(0, Math.atan2(fx, fz) + Math.PI / 2, 0);
+            f.cloth.material = m.current ? this.flagMats.current : this.flagMats.cloth;
+            f.ring.material = m.current ? this.flagMats.ringCurrent : this.flagMats.ring;
+            f.group.visible = true;
+        }
+        for (let i = n; i < this.flags.length; i++) this.flags[i].group.visible = false;
     }
 
     // -----------------------------------------------------------------------
@@ -675,6 +741,10 @@ export class Effects {
         this.snow.material.dispose();
         for (const r of this.rings) r.mesh.material.dispose();
         this.ringGeo.dispose();
+        this.flagPoleGeo.dispose();
+        this.flagClothGeo.dispose();
+        for (const k of Object.keys(this.flagMats)) this.flagMats[k].dispose();
+        this.flags.length = 0;
         this.flash.geometry.dispose();
         this.flash.material.dispose();
         if (this.headlightCar) this.headlightCar.object.remove(this.spot, this.spotTarget);

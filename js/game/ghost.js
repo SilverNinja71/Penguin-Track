@@ -8,6 +8,35 @@ import { qrotate } from '../core/mathd.js';
 const COAST_TICKS = 300;   // keep the ghost rolling past the line instead of freezing on it
 const UP = [0, 1, 0];
 
+/**
+ * The three leaderboard ghosts (records.js boards), each with its own colour on
+ * the track and the minimap and its own on/off setting, so any mix of them can
+ * race you at once.
+ */
+export const CATEGORY_GHOSTS = {
+    pure: { label: 'Best human', color: '#cfeaff', setting: 'showGhost' },
+    tas: { label: 'Best TAS', color: '#ff7ad9', setting: 'showTasGhost' },
+    ai: { label: 'Best AI', color: '#7dffa0', setting: 'showAiGhost' },
+};
+export const EMPEROR_GHOST = { label: 'Emperor', color: '#6fd3ff' };
+
+/**
+ * Ghosts to race from the board leaders ({ pure, tas, ai }: an entry with a
+ * replay, or null), for the categories switched on in `settings`:
+ * [{ category, replay, label, color }], in pure, tas, ai order.
+ */
+export function categoryGhosts(settings, leaders) {
+    const out = [];
+    for (const category of Object.keys(CATEGORY_GHOSTS)) {
+        const g = CATEGORY_GHOSTS[category];
+        const lead = leaders && leaders[category];
+        if (!settings[g.setting] || !lead || !lead.replay) continue;
+        const what = lead.label && category !== 'pure' ? ` · ${lead.label}` : '';
+        out.push({ category, replay: lead.replay, label: `${g.label}${what}`, color: g.color });
+    }
+    return out;
+}
+
 function sampleOf(sim, teleport) {
     const c = sim.car;
     return {

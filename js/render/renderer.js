@@ -333,6 +333,19 @@ export class GameRenderer {
         }
     }
 
+    /** Quick TAS savestate flags on the track: [{ pos, quat, current }]; null or [] hides them. */
+    setTasMarkers(list) {
+        this.effects.setMarkers(list);
+    }
+
+    /**
+     * Clears particles, skid marks, trails and flashes left by the last moments
+     * (a savestate rewind) without rebuilding anything.
+     */
+    resetEffects() {
+        this.effects.clearTransient();
+    }
+
     /** Start-gate countdown lights: 3, 2, 1 (red), 0 (green, GO) or null (idle). */
     setCountdown(n) {
         this.scenery?.setCountdown(n);

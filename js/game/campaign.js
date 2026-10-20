@@ -1,11 +1,13 @@
 // Campaign: Race / Platform / Training tabs, tier rows in their colours and a
 // card per track (id, name, mood, personal best, medal). The detail panel shows
-// the medal targets of the hovered or focused track.
+// the medal targets of the hovered or focused track, its three-category
+// leaderboard (Pure Run / Best TAS / Best AI) and Race / Quick TAS buttons.
 import { formatTime } from '../core/format.js';
 import { trackHash } from '../core/codec.js';
 import { h } from './dom.js';
 import { icon, iconSvg, MOOD_LABELS } from './icons.js';
 import { allRecords } from './records.js';
+import { leaderboardPanel } from './leaderboard.js';
 
 const TAB_LABELS = { race: 'Race', platform: 'Platform', training: 'Training' };
 const TAB_ICONS = { race: 'flag', platform: 'snowflake', training: 'penguin' };
@@ -175,11 +177,24 @@ const campaign = {
                 }, h('span.pt-medal', { class: t.medal }), h('span', t.label), h('span.camp-target-text', t.text),
                 t.medal === next ? h('span.camp-next', 'next') : null)))
                 : h('p.pt-muted', 'No medal times for this track.'),
-            h('button.pt-btn.primary.camp-go', { type: 'button', onclick: () => this.play(info.id) }, icon('play', 20), 'Race'));
+            leaderboardPanel(app, info, this._hash(info.id)),
+            h('div.camp-actions',
+                h('button.pt-btn.primary.camp-go', { type: 'button', onclick: () => this.play(info.id) }, icon('play', 20), 'Race'),
+                h('button.pt-btn.camp-quick', {
+                    type: 'button', title: 'Quick TAS: race with savestates (C mark, R rewind)', onclick: () => this.quickTas(info.id),
+                }, icon('tas', 20), 'Quick TAS')));
     },
 
     play(id) {
         this.app.goto('play', { track: id, mode: 'campaign' });
+    },
+
+    quickTas(id) {
+        const app = this.app;
+        app.goto('play', {
+            track: id, mode: 'campaign', quickTas: true, exitLabel: 'Back to tracks',
+            onExit: () => app.goto('campaign', { select: id }),
+        });
     },
 
     onKey(e) {

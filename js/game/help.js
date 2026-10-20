@@ -10,6 +10,7 @@ import { EFFECT_INFO } from './hud.js';
 const PAD = {
     gas: 'RT / A', brake: 'LT / X', left: 'Left stick', right: 'Left stick', respawn: 'B', restart: 'Y / Back',
     camera1: '—', camera2: '—', camera3: '—', cameraCycle: 'RB', ghost: '—', pause: 'Start',
+    tasMark: 'LB', tasRewind: 'Y', tasPrev: 'D-pad ↓', tasNext: 'D-pad ↑',
 };
 
 const SURFACE_TEXT = {
@@ -27,7 +28,8 @@ const TIPS = [
     ['Loops', 'Keep the gas held all the way round. A loop only fails when you arrive slow and lift.'],
     ['Jumps', 'Land straight: touching down nose-first throws away speed. Steering works a little in the air.'],
     ['Banked turns', 'The low inside line is the fast one; at full speed you need the whole width.'],
-    ['Ghosts', 'Your personal best runs alongside you as a ghost (G hides it). Splits at each checkpoint show blue when you are ahead, red when behind.'],
+    ['Ghosts', 'Your personal best runs alongside you as a ghost (G hides it). Splits at each checkpoint show blue when you are ahead, red when behind. In Settings or the pause menu you can also race the best TAS run (pink) and the best AI run (green) at the same time.'],
+    ['Quick TAS', 'TAS → Quick TAS lets you race and rewind: C drops a savestate marker, R or Backspace jumps back to it, and [ ] step through your markers. The run lands on the Best TAS leaderboard, and Open in Pro Studio carries the inputs into the frame-by-frame editor.'],
     ['Platform tracks', 'Fewest respawns wins, then time. Take it slow where it matters.'],
 ];
 

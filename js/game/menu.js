@@ -8,7 +8,7 @@ const ITEMS = [
     { id: 'editor', label: 'Editor', icon: 'edit', hint: 'Build a track' },
     { id: 'mytracks', label: 'My Tracks', icon: 'map', hint: 'Your tracks and share codes' },
     { id: 'replays', label: 'Replays', icon: 'film', hint: 'Watch and share runs' },
-    { id: 'tas', label: 'TAS Studio', icon: 'tas', hint: 'Frame-perfect runs' },
+    { id: 'tas', label: 'TAS', icon: 'tas', hint: 'Quick TAS rewinds or the Pro Studio' },
     { id: 'ai', label: 'AI Lab', icon: 'brain', hint: 'Train a driver' },
     { id: 'mp', label: 'Multiplayer', icon: 'users', hint: 'Hot-seat and ghost rooms' },
     { id: 'settings', label: 'Settings', icon: 'gear', hint: 'Sound, graphics, keys' },

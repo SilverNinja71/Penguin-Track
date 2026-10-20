@@ -518,3 +518,39 @@ test('checkpoint split chimes, gated countdown, unknown names', async () => {
         delete globalThis.AudioContext;
     }
 });
+
+test('a Quick TAS rewind keeps one engine voice: resetCar never stacks audio nodes', async () => {
+    globalThis.AudioContext = MockAudioContext;
+    try {
+        const a = new AudioEngine({ seed: 3 });
+        assert.equal(await a.unlock(), true);
+        const ctx = MockAudioContext.last;
+        const sim = new Sim(buildWorld(getSample('S01')));
+        const step = () => {
+            sim.step({ steer: 0, gas: true, brake: false });
+            ctx.currentTime += 0.01;
+            a.updateCar(sim.car, 0.01, sim.lastInput);
+        };
+        for (let i = 0; i < 50; i++) step();
+        const voice = a._car, nodes = ctx.nodes, sources = ctx.sources;
+        const saved = sim.getState();
+        // Thirty rewinds in a row, as fast as a player can press R.
+        for (let r = 0; r < 30; r++) {
+            sim.setState(saved);
+            a.resetCar();
+            for (let i = 0; i < 5; i++) step();
+        }
+        assert.equal(a._car, voice, 'the same voice keeps playing');
+        assert.equal(ctx.nodes, nodes, 'no new audio nodes');
+        assert.equal(ctx.sources, sources, 'no new sources');
+        assert.ok(nodes > 20, `the voice built its graph (${nodes} nodes)`);
+        // A stopped car (pause, results) does build a fresh voice next time: that is the one other path.
+        a.stopCar();
+        step();
+        assert.notEqual(a._car, voice);
+        assert.ok(ctx.nodes > nodes);
+        a.dispose();
+    } finally {
+        delete globalThis.AudioContext;
+    }
+});

@@ -15,7 +15,28 @@ export const ACTIONS = [
     { id: 'cameraCycle', label: 'Cycle cameras' },
     { id: 'ghost', label: 'Toggle ghosts' },
     { id: 'pause', label: 'Pause / menu' },
+    { id: 'tasMark', label: 'Quick TAS: drop savestate marker', group: 'tas' },
+    { id: 'tasRewind', label: 'Quick TAS: rewind to marker', group: 'tas' },
+    { id: 'tasPrev', label: 'Quick TAS: previous marker', group: 'tas' },
+    { id: 'tasNext', label: 'Quick TAS: next marker', group: 'tas' },
 ];
+
+/**
+ * Race actions a Quick TAS key may share: while Quick TAS runs, a key bound to
+ * a TAS action does only that (C marks instead of cycling cameras, Backspace
+ * rewinds instead of restarting). Driving, respawn and pause keys never overlap.
+ */
+export const TAS_SHADOWED = ['restart', 'camera1', 'camera2', 'camera3', 'cameraCycle', 'ghost'];
+
+const isTas = (id) => id === 'tasMark' || id === 'tasRewind' || id === 'tasPrev' || id === 'tasNext';
+
+/** True when one key cannot serve both actions (the key settings take it away from the other). */
+export function bindingsConflict(a, b) {
+    if (a === b) return false;
+    if (isTas(a) && TAS_SHADOWED.includes(b)) return false;
+    if (isTas(b) && TAS_SHADOWED.includes(a)) return false;
+    return true;
+}
 
 // Trackmania defaults (ARCHITECTURE.md, Controls). KeyboardEvent.code values, so
 // the layout does not matter: on AZERTY 'KeyW' is the key labelled Z.
@@ -32,6 +53,10 @@ export const DEFAULT_BINDINGS = {
     cameraCycle: ['KeyC'],
     ghost: ['KeyG'],
     pause: ['Escape', 'KeyP'],
+    tasMark: ['KeyC'],
+    tasRewind: ['KeyR', 'Backspace'],
+    tasPrev: ['BracketLeft'],
+    tasNext: ['BracketRight'],
 };
 
 export const CAMERAS = [
@@ -65,7 +90,9 @@ export function defaultSettings() {
         quality: defaultQuality(),
         reducedMotion: prefersReducedMotion(),
         camera: 'chase',
-        showGhost: true,          // personal-best ghost
+        showGhost: true,          // best human (Pure run) ghost: your personal best
+        showTasGhost: false,      // best TAS run (Quick TAS or the Studio)
+        showAiGhost: false,       // best AI Lab / autopilot run
         showEmperorGhost: false,  // the author run
         showSplits: true,
         showMinimap: true,
@@ -102,6 +129,8 @@ export function sanitizeSettings(raw) {
         reducedMotion: bool(raw.reducedMotion, d.reducedMotion),
         camera: pick(raw.camera, CAMERAS.map((c) => c.id), d.camera),
         showGhost: bool(raw.showGhost, d.showGhost),
+        showTasGhost: bool(raw.showTasGhost, d.showTasGhost),
+        showAiGhost: bool(raw.showAiGhost, d.showAiGhost),
         showEmperorGhost: bool(raw.showEmperorGhost, d.showEmperorGhost),
         showSplits: bool(raw.showSplits, d.showSplits),
         showMinimap: bool(raw.showMinimap, d.showMinimap),

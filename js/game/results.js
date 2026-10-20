@@ -1,11 +1,13 @@
-// Results: the time, a medal reveal, the difference to the previous personal
-// best, splits, respawns, and Retry / Next / Watch replay / Save replay / Back.
-// The record itself was saved the moment the car crossed the line (race.js),
-// so a quick Backspace restart never loses a personal best.
+// Results: the time, a medal reveal, the difference to the previous best of
+// the run's leaderboard (Pure Run, Best TAS or Best AI) and its place there,
+// splits, respawns, and Retry / Next / Watch replay / Save replay / Open in Pro
+// Studio / Back. The run was saved the moment the car crossed the line
+// (race.js), so a quick Backspace restart never loses a personal best. Only
+// Pure runs earn medals; TAS and AI runs show the medal ladder for reference.
 import { formatTime } from '../core/format.js';
 import { h } from './dom.js';
 import { iconSvg } from './icons.js';
-import { saveReplay } from './records.js';
+import { saveReplay, CATEGORY_INFO } from './records.js';
 import { defaultExit, defaultExitParams } from './race.js';
 
 const LADDER = ['bronze', 'silver', 'gold', 'emperor'];
@@ -33,11 +35,17 @@ const results = {
 
         const cat = app.catalog;
         const platform = track.mode === 'platform';
-        const medal = outcome ? outcome.medal : cat.medalFor(track, result);
+        const category = result.category || 'pure';
+        const pure = category === 'pure';
+        const board = result.board || null;
+        // TAS and AI runs earn no medal: the ladder still shows where the time lands.
+        const medal = pure ? (outcome ? outcome.medal : cat.medalFor(track, result)) : null;
+        const ladderMedal = medal || cat.medalFor(track, result);
         const prev = result.pbBefore || (outcome && outcome.previous) || null;
         const prevMs = prev && Number.isFinite(prev.bestMs) ? prev.bestMs : null;
-        const improved = outcome ? outcome.improved : false;
+        const improved = outcome ? outcome.improved : !!(board && board.improved);
         const nextId = mode === 'campaign' ? cat.nextTrackId(track.id) : null;
+        const boardName = CATEGORY_INFO[category] ? CATEGORY_INFO[category].label : '';
         this.saved = false;
 
         // ---- headline
@@ -48,20 +56,20 @@ const results = {
             diffEl = h('div.res-diff', { class: improved ? 'ahead' : d === 0 && respD === 0 ? 'even' : 'behind' },
                 h('span.pt-mono', signed(d)),
                 platform && respD !== 0 ? h('span.pt-mono', ` · ${respD > 0 ? '+' : ''}${respD} resp.`) : null,
-                h('span.res-diff-label', improved ? 'New personal best!' : `PB ${formatTime(prevMs)}`));
+                h('span.res-diff-label', improved ? (pure ? 'New personal best!' : `New ${boardName}!`) : `${pure ? 'PB' : 'Best'} ${formatTime(prevMs)}`));
         } else if (mode !== 'test') {
-            diffEl = h('div.res-diff.first', h('span.res-diff-label', 'First finish on this track!'));
+            diffEl = h('div.res-diff.first', h('span.res-diff-label', pure ? 'First finish on this track!' : `First run on the ${boardName} board!`));
         }
 
         const medalName = medal ? cat.medalLabel(medal) : null;
         const hasMedals = cat.medalTargets(track).length > 0;
-        const bigMedal = h('div.res-medal-big', { class: (medal || 'none') + (hasMedals ? '' : ' pt-hidden') },
+        const bigMedal = h('div.res-medal-big', { class: (medal || 'none') + (hasMedals && pure ? '' : ' pt-hidden') },
             h('span.pt-medal.big', { class: medal || 'none' }),
             h('div.res-medal-name', medal ? `${medalName} medal` : 'No medal yet'));
         const ladder = h('div.res-ladder', LADDER.map((m) => {
             const tg = cat.medalTargets(track).find((t) => t.medal === m);
             if (!tg) return null;
-            const got = medal && cat.medalRank(medal) <= cat.medalRank(m);
+            const got = ladderMedal && cat.medalRank(ladderMedal) <= cat.medalRank(m);
             // Platform targets read 'no respawns · 0:24.41': one line per part.
             return h('div.res-step', { class: got ? 'got' : '', dataset: { medal: m } },
                 h('span.pt-medal', { class: m }),
@@ -75,7 +83,15 @@ const results = {
         const goldLine = outcome && outcome.gold
             ? h('div.res-gold', h('span.res-coin'), `+${outcome.gold.amount} gold`, h('span.pt-muted', ` (${outcome.gold.total} total)`))
             : null;
-        const autoTag = result.autopilot ? h('span.pt-tag', 'Autopilot run') : null;
+        const autoTag = result.autopilot ? h('span.pt-tag', 'Autopilot run')
+            : category === 'tas' ? h('span.pt-tag.res-tas-tag', result.label || 'TAS run') : null;
+        const boardLine = board && board.rank
+            ? h('div.res-stat.res-board', { class: `cat-${category}` }, h('span.pt-ico', { html: iconSvg('trophy', 18) }), `#${board.rank} on ${boardName}`)
+            : null;
+        const tasNote = !pure
+            ? h('p.res-note.pt-muted', `${category === 'tas' ? 'TAS' : 'AI'} runs have their own leaderboard and don't earn medals.`
+                + (category === 'tas' && result.rewinds ? ` ${result.rewinds} rewind${result.rewinds === 1 ? '' : 's'}, ${result.markers || 0} marker${result.markers === 1 ? '' : 's'}.` : ''))
+            : null;
 
         // ---- splits
         const pbSplits = prev && Array.isArray(prev.splits) ? prev.splits : null;
@@ -106,9 +122,10 @@ const results = {
         this.canRetry = pp.retry !== false;
         const actions = h('div.res-actions',
             this.canRetry ? B('Retry', 'retry', () => this.retry(), { cls: nextId ? '' : 'primary', focus: !nextId, kbd: '⌫' }) : null,
-            nextId ? B('Next track', 'next', () => app.goto('play', { track: nextId, mode: 'campaign' }), { cls: 'primary', focus: true }) : null,
+            nextId ? B('Next track', 'next', () => app.goto('play', { track: nextId, mode: 'campaign', quickTas: pp.quickTas || undefined }), { cls: 'primary', focus: true }) : null,
             B('Watch replay', 'film', () => this.watch()),
             this.saveBtn,
+            result.replay ? B('Open in Pro Studio', 'tas', () => this.openInStudio()) : null,
             B(backLabel, 'back', () => this.back(), { cls: this.canRetry ? 'ghost' : 'primary', focus: !this.canRetry && !nextId, sound: 'back', kbd: 'Esc' }));
 
         const panel = h('div.res-panel.pt-panel',
@@ -119,7 +136,8 @@ const results = {
                 h('div.res-main',
                     h('div.res-time.pt-mono', formatTime(result.timeMs)),
                     diffEl,
-                    h('div.res-stats', respawnsLine, goldLine),
+                    h('div.res-stats', respawnsLine, goldLine, boardLine),
+                    tasNote,
                     bigMedal,
                     ladder),
                 h('div.res-side',
@@ -168,6 +186,13 @@ const results = {
         const p = this.params;
         const back = { ...p, stage: null, revisit: true };
         this.app.goto('play', { track: p.track, mode: 'replay', replay: p.result.replay, onExit: () => this.app.goto('results', back) });
+    },
+
+    /** The run's inputs into the Pro TAS Studio's frame-by-frame editor; Back returns here. */
+    openInStudio() {
+        const p = this.params;
+        const back = { ...p, stage: null, revisit: true };
+        this.app.goto('tas', { pro: true, track: p.track, replay: p.result.replay, onExit: () => this.app.goto('results', back) });
     },
 
     saveReplay() {

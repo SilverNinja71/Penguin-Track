@@ -447,6 +447,35 @@ longer pedal edits) or bruteforcing one window at a time pays off.
   `InputTimeline.decode(msg.inputs)` as a new version (serialize it to show the script).
 - Save projects as `{ trackId, script, notes }` under the `tas` storage key.
 
+## Quick TAS (Race & Rewind)
+
+Menu → **TAS** opens one of two modes, switched at the top of either page and
+remembered (`storage 'tasMode'`): **Quick TAS (Race & Rewind)**, the default, and the
+**Pro TAS Studio** below. Quick TAS is a normal race (`race.js` with `params.quickTas`;
+also **Quick TAS** in the campaign detail panel) where:
+
+| key (rebindable) | gamepad | does |
+| --- | --- | --- |
+| `C` | LB | drop a savestate marker at the current tick (and a flag on the track) |
+| `R` / `Backspace` | Y | rewind to the current marker; the inputs after it are cut |
+| `[` / `]` | D-pad ↓ / ↑ | step to the previous / next marker and rewind there |
+| `Delete` | Back | restart from the line (clears the markers) |
+
+While Quick TAS runs, its keys win over the race keys they share (`C` would cycle
+cameras, `Backspace` would restart: `settings.js` `TAS_SHADOWED`); they never take a
+driving, respawn or pause key. `js/tas/quick.js` (`QuickTas`) keeps the markers: each is
+an exact `Sim.getState()` plus the inputs since the previous marker, so rewinding to one
+and driving on records a replay that re-simulates to exactly what was seen (the Start
+marker sits at tick 0). Markers form one chain: stepping back keeps the later ones (with
+their inputs) until a new marker is dropped after an earlier one, which overwrites them;
+past 100 the oldest merge away. A rewind clears particles and skid marks
+(`renderer.resetEffects()`), snaps the camera, and keeps the one engine voice
+(`audio.resetCar()`), so nothing stacks. After the finish the car waits: rewind to keep
+going, or Enter for the results. A run with no marker and no rewind is still a Pure run;
+otherwise it goes on the **Best TAS** board. **Open in Pro Studio** (pause menu, results)
+hands the recorded inputs to the Studio as a new project. Validated finished Studio runs
+go on the Best TAS board too, as `Studio/Bruteforce`.
+
 ## TAS Studio (the screen)
 
 The in-game studio (menu → TAS Studio, or **TAS Studio** on a replay) is built on the

@@ -30,6 +30,8 @@ export class NullRenderer {
     removeCar() {}
     setCameraMode() {}
     handleEvents() {}
+    setTasMarkers() {}
+    resetEffects() {}
     setViewports() {}
     render() {}
     resize() {}
@@ -52,15 +54,16 @@ export class NullAudio {
     play() { return 0; }
     music() {}
     stopCar() {}
+    resetCar() {}
     suspend() {}
     resume() {}
     dispose() {}
 }
 
 export const RENDERER_METHODS = ['loadWorld', 'clearWorld', 'setMood', 'setQuality', 'setReducedMotion', 'setCountdown', 'addCar', 'removeCar',
-    'setCameraMode', 'handleEvents', 'setViewports', 'render', 'resize', 'dispose'];
+    'setCameraMode', 'handleEvents', 'setTasMarkers', 'resetEffects', 'setViewports', 'render', 'resize', 'dispose'];
 export const AUDIO_METHODS = ['unlock', 'autoUnlock', 'setVolume', 'updateCar', 'handleEvents', 'countdown', 'go', 'ui', 'chime', 'play',
-    'music', 'stopCar', 'suspend', 'resume', 'dispose'];
+    'music', 'stopCar', 'resetCar', 'suspend', 'resume', 'dispose'];
 
 /** Gives `obj` a no-op for every contract method it lacks; wraps the rest so one failing call is logged, not fatal. */
 function harden(obj, stub, methods, label) {

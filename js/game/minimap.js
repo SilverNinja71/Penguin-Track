@@ -1,10 +1,13 @@
 // Small top-down map: the route polyline (drawn once to an offscreen canvas),
-// checkpoints, start and finish, then the ghosts and the player car per frame.
+// checkpoints, start and finish, then Quick TAS markers, the ghosts (each in
+// its own colour) and the player car per frame.
 // North-up: screen x = world x, screen y = world z.
 import { h } from './dom.js';
 
 const SIZE = 150;   // CSS pixels
 const PAD = 12;
+const GHOST_FILL = 'rgba(184, 241, 255, 0.55)';
+const NONE = [];
 
 export class Minimap {
     constructor(world, { size = SIZE } = {}) {
@@ -90,17 +93,39 @@ export class Minimap {
         if (sp) dot(sp.pos[0], sp.pos[2], '#6bffb0', 3.6);
     }
 
-    /** pos: [x, y, z]; quat: car orientation; ghosts: [[x, y, z] | null]. */
-    draw(pos, quat, ghosts) {
+    /**
+     * pos: [x, y, z]; quat: car orientation; ghosts: [[x, y, z] | null];
+     * colors: CSS colour per ghost (optional); markers: Quick TAS savestate
+     * markers [{ pos, current }] (optional).
+     */
+    draw(pos, quat, ghosts, colors = NONE, markers = NONE) {
         const c = this.ctx, d = this.dpr;
         c.clearRect(0, 0, this.el.width, this.el.height);
         c.drawImage(this.base, 0, 0);
-        for (const g of ghosts) {
+        for (let i = 0; i < markers.length; i++) {
+            const m = markers[i];
+            const x = this._x(m.pos[0]), y = this._y(m.pos[2]), r = (m.current ? 4.2 : 3.2) * d;
+            c.beginPath();
+            c.moveTo(x, y - r);
+            c.lineTo(x + r, y);
+            c.lineTo(x, y + r);
+            c.lineTo(x - r, y);
+            c.closePath();
+            c.fillStyle = m.current ? '#ffd54a' : '#7fdcff';
+            c.fill();
+            c.lineWidth = 1.2 * d;
+            c.strokeStyle = 'rgba(4, 16, 36, 0.9)';
+            c.stroke();
+        }
+        for (let i = 0; i < ghosts.length; i++) {
+            const g = ghosts[i];
             if (!g) continue;
             c.beginPath();
             c.arc(this._x(g[0]), this._y(g[2]), 3.4 * d, 0, Math.PI * 2);
-            c.fillStyle = 'rgba(184, 241, 255, 0.55)';
+            c.globalAlpha = colors[i] ? 0.85 : 1;
+            c.fillStyle = colors[i] || GHOST_FILL;
             c.fill();
+            c.globalAlpha = 1;
         }
         if (!pos) return;
         // Heading: car-local +Z rotated by quat, projected on the ground.
