@@ -19,10 +19,12 @@ recorded as ordinary core inputs, so every run is a replay the game can show as 
 | `tools/headless.mjs` | JSON-lines env server on stdin/stdout |
 | `python/` | `penguintrack_env.py` (gymnasium env), `random_agent.py`, `train_ppo.py` |
 | `models/demo-S01.json` | pre-trained demo driver for the AI Lab |
+| `js/ai/lab*.js`, `css/ai.css` | the in-game AI Lab ([below](#ai-lab-jsailabjs-cssaicss)) |
 | `tools/tests/ai.test.mjs` | tests (`node tools/test.mjs "ai >"`) |
 
-Everything in `js/ai/` except `worker.js` (and `createWorkerPool`, which needs `Worker`) is
-pure (no DOM): it runs in the page, in Web Workers and in Node.
+Everything in `js/ai/` except `worker.js` (and `createWorkerPool`, which needs `Worker`) and
+the AI Lab's UI files (`lab.js`, `lab-chart.js`, `lab-overlay.js`, `lab-help.js`) is pure (no
+DOM): it runs in the page, in Web Workers and in Node.
 
 ## Quick start
 
@@ -471,21 +473,91 @@ vs the autopilot's 28.11 s) and fine-tuning on A01 reaches 23.97 s in two genera
 Throughput: ~20k env steps/s (80k ticks/s) per thread with random actions; an S01
 episode is ~500 steps, so 8 workers evaluate 100–200 episodes per second.
 
-## For the AI Lab (`js/ai/lab.js`, a later wave)
+## AI Lab (`js/ai/lab*.js`, `css/ai.css`)
 
-- Track picker: `await listTracks()`, then `resolveTrack(id)`; custom tracks from storage
-  can be passed as JSON.
-- Network: `archFor(envConfig, hidden)`. Training: `createWorkerPool()`, `pool.init({
-  trackJSON, envConfig, arch })`, `new NeuroTrainer({ algo, arch, seed, evaluator: pool })`,
-  then `await trainer.step()` per animation-friendly chunk (a generation takes ~0.3–2 s
-  with 8 workers); chart `trainer.history`. `trainer.getState()` is JSON for pause/resume.
-- Watching the best driver: `const [r] = await pool.evaluate([trainer.best.params], {
-  replay: true })` gives a replay; play it as a ghost (`app.goto('play', { track, mode:
-  'replay', replay: r.replay })` or race against it). Or drive live: build a `PenguinEnv`
-  on the main thread, `policy.act(obs)` each step and render `env.sim` (frameSkip ticks per
-  step).
-- Saving: `makeModelFile({ name, world, envConfig, net, stats, replay })` into the `ai`
-  storage key; `loadModelFile` to load (it checks the observation size).
-- Demo driver: `fetch(new URL('../../models/demo-S01.json', import.meta.url))` →
-  `loadModelFile` — it carries its ghost (`file.replay`) and its training curve
-  (`file.stats.history`).
+The in-game trainer: Menu → AI Lab (`app.goto('ai')`, `?screen=ai`). Pick a track, train
+a flock in Web Workers, watch every generation drive, keep the best driver, race it.
+
+| file | what |
+| --- | --- |
+| `js/ai/lab.js` | the screen (`{ id: 'ai', enter, exit, back }`): DOM, training loop, live view, drivers, keys |
+| `js/ai/lab-logic.js` | pure: presets, settings → env config / network / trainer options, which agents to show, colours, model files in storage `ai`, imports |
+| `js/ai/lab-playback.js` | pure: `FieldPlayback`, a generation's episodes replayed side by side with the followed car's observations and network outputs |
+| `js/ai/lab-chart.js` | the training curve (canvas 2D) |
+| `js/ai/lab-overlay.js` | sensor rays and look-ahead points of the followed car (three.js lines through `renderer.three` / `renderer.scene`) |
+| `js/ai/lab-help.js` | the "How it works" explainer (diagram, plain-language sections, Python / Node commands) |
+| `css/ai.css` | Lab styles (loaded by the screen with a `<link>` on first entry) |
+| `tools/tests/ai-lab.test.mjs` | Node tests for the pure parts (`node tools/test.mjs ai-lab`) |
+
+**Layout.** Left: Train / Drivers tabs, with Train · Pause · Stop pinned at the bottom.
+Right: progress tiles (best score, best time, finish rate, average, runs per second, training
+time), the chart and the Driver card. Middle: the 3D field, the followed driver's decision
+panel and the view bar. Works at 1280×720 and 1024×600; narrower than 820 px it stacks.
+
+**Training.** Settings (the Quick / Balanced / Deep presets, or anything custom):
+
+| setting | Quick | Balanced | Deep |
+| --- | --- | --- | --- |
+| algorithm | GA | GA | ES |
+| population | 32 | 64 | 128 |
+| hidden layers | 16 | 32 × 32 | 64 × 64 |
+| mutation (GA std) / noise σ, step (ES) | 0.05 | 0.03 | 0.04 / 0.02 |
+| frame skip | 5 | 4 | 4 |
+| edge rays / look-ahead | 9 / 4 points | 15 / 4 | 21 / 5 (to 150 m) |
+| generations (0 = no limit) | 30 | 100 | 300 |
+
+Also: episode length (auto = route / 15 m/s like `tools/train.mjs`), ray fan, wall rays,
+actions (9 buttons or analog), start (start line, any checkpoint, anywhere) and the seed.
+`runConfig(settings, world, fromModel?)` turns them into `{ envConfig, arch, trainer,
+workerInit }`; with "Start from the loaded driver's brain" the env config and network come
+from the loaded model and its weights seed the population (GA) or the mean (ES).
+
+The pool is `createWorkerPool(min(16, hardwareConcurrency − 1))`; each generation is one
+`trainer.step()` whose evaluator asks the pool for every candidate's replay (a few kB of
+run-length inputs each). The main thread only renders, so the page stays responsive. Pause
+finishes the generation in flight and keeps the workers; Stop drops it at once (the GA has
+not changed yet; for ES the RNG is rewound, so Continue asks the same generation again) and
+closes the workers. Leaving the screen (racing the AI, TAS Studio, the menu) stops like that
+too, but the trainer object stays in memory: back in the Lab it shows "Paused" with its curve
+and Resume carries on. The trainer is the same `NeuroTrainer` as `tools/train.mjs`, so the
+same seed and settings give the same curve as the CLI.
+
+**Live view.** `pickShown(fitness, cap)` picks up to 32 (8 / 16 / 32) candidates spread
+evenly over the ranking (always the best and the worst). `FieldPlayback` replays their
+recorded inputs on one `PenguinEnv` sim + route tracker each (deterministic: every car
+drives exactly the run its worker scored; the test checks end ticks, progress and the
+network's argmax against the recorded actions). The best is an opaque gold car, the rest
+are ghosts tinted by rank (ice cyan → violet → rose) that fade when they crash. Training
+runs faster than real time, so a finished field moves on to the newest generation (or press
+Latest). Cameras: chase / orbit follow the selected car, top shows the whole track.
+For the followed car the overlay draws the edge rays (red = edge close, cyan = clear),
+wall rays when enabled and the gold look-ahead points; the panel below shows the 3×3
+action grid (brightness = softmax of the network's outputs, outline = the button pressed),
+steer and throttle, the curvature ahead and the edge distances.
+
+**Drivers.** Storage `ai` is `{ [name]: modelFile }`, the exact `makeModelFile` format
+(`listModels` / `saveModel` / `deleteModel`). Saving a training run re-drives the best
+weights from the start line (`buildModelFile`, like `tools/train.mjs`), so the stored replay
+is a clean ghost and the file loads in the CLI (`--eval`, `--init`). Import accepts model
+files (CLI, Lab exports), `tools/train.mjs` `.state.json` files (the run continues in the
+browser: Continue) and anything the replay-code decoder reads (replay JSON from
+`python/train_ppo.py` or TAS, `PTR` codes): those can be watched, raced and opened in TAS
+Studio but have no network. Export downloads the model JSON. "Demo driver" fetches
+`models/demo-S01.json`. A model's track is the catalog's when the layout hash matches, else
+its embedded share code.
+
+**Race / watch / TAS.** Race the AI: `app.goto('play', { track, ghosts: [{ replay, label,
+color: '#ffd54a' }], onExit: () => app.goto('ai') })` (records and medals count as usual on
+official tracks); Watch: the same with `mode: 'replay'`; TAS Studio: `app.goto('tas', {
+track, replay, onExit })`, so the studio's Back returns to the Lab. `track` is the id when the catalog has that exact layout, else the JSON.
+
+**Keys.** Space train / pause / resume (when no button has focus), Esc menu, C camera,
+`[` `]` previous / next car, B follow the best, R rays, `-` `+` playback speed, H how it
+works. Everything is a real button / input, so Tab and the gamepad's menu navigation work.
+
+**Checked in headless Chrome** (SwiftShader): Quick on T01 reaches generation 23 in ~30 s
+on 5 workers with 84 % of the flock finishing and a best of 31.79 s (autopilot 34.42 s);
+the chart, 32 tinted cars, rays and the decision panel update; save → Drivers list →
+Race the AI (gold "AI …" ghost in the race) → back to a paused Lab → Resume → Stop;
+demo driver; ES with analog actions; importing a CLI model and a CLI `.state.json`
+(continued from generation 3); 1280×720 and 1024×600.

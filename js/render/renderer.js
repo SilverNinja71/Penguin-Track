@@ -312,7 +312,7 @@ export class GameRenderer {
      * top-left corner of the canvas; null or [] restores one full view.
      */
     setViewports(rects) {
-        this.viewports = rects && rects.length ? rects.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h, camera: r.camera || this.camera })) : null;
+        this.viewports = rects && rects.length ? rects.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h, camera: r.camera || this.camera, before: typeof r.before === 'function' ? r.before : null })) : null;
     }
 
     // -----------------------------------------------------------------------
@@ -388,6 +388,7 @@ export class GameRenderer {
                 const h = Math.round(v.h * size.y), y = Math.round((1 - v.y - v.h) * size.y);
                 gl.setViewport(x, y, w, h);
                 gl.setScissor(x, y, w, h);
+                if (v.before) v.before(v);   // per-view tweaks, e.g. split-screen shows the other player as a ghost
                 this._renderView(v.camera, v.h);
             }
             gl.setScissorTest(false);

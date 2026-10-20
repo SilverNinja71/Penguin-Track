@@ -108,3 +108,31 @@ export function isTypingTarget(t) {
     const type = (t.type || 'text').toLowerCase();
     return !['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color'].includes(type);
 }
+
+const cssLoads = new Map();
+
+/**
+ * Adds css/<name>.css once (link[data-pt-css=name]); resolves when it has loaded,
+ * failed, or after 1.5 s, so a screen can measure its layout styled.
+ */
+export function loadModuleCss(name) {
+    if (cssLoads.has(name)) return cssLoads.get(name);
+    let link = document.querySelector(`link[data-pt-css="${name}"]`);
+    let done;
+    if (link) {
+        done = Promise.resolve();
+    } else {
+        link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = new URL(`../../css/${name}.css`, import.meta.url).href;
+        link.dataset.ptCss = name;
+        done = new Promise((resolve) => {
+            link.onload = resolve;
+            link.onerror = resolve;
+            setTimeout(resolve, 1500);
+        });
+        document.head.appendChild(link);
+    }
+    cssLoads.set(name, done);
+    return done;
+}

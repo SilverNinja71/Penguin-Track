@@ -1,5 +1,6 @@
 // Stand-in screen for modes that are loaded on demand (editor, TAS Studio, AI
-// Lab, multiplayer) when their module is missing from this build or fails.
+// Lab, multiplayer) when their module fails to load (offline, a bad deploy) or
+// its enter() throws.
 import { h } from './dom.js';
 import { icon, iconSvg } from './icons.js';
 import { snowfall } from './menu.js';
@@ -26,7 +27,8 @@ export function unavailableScreen(id, error = null) {
                 h('div.soon-card.pt-panel',
                     h('div.soon-icon', { html: iconSvg(info.icon, 54) }),
                     h('h1.pt-title', info.title),
-                    h('p.soon-lead', broken ? 'This part of Penguintrack hit a snag while loading.' : 'Still being built: the snowplough hasn’t reached this part yet.'),
+                    h('p.soon-lead', broken ? 'This part of Penguintrack hit a snag while loading.' : 'This part of Penguintrack is snowed in: it couldn’t be downloaded.'),
+                    broken ? null : h('p.pt-muted', 'Check your connection and try again.'),
                     info.blurb ? h('p.pt-muted', info.blurb) : null,
                     broken ? h('pre.soon-error', String(error.message || error)) : null,
                     h('div.pt-row.soon-actions',

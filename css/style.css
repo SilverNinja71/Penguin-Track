@@ -76,8 +76,9 @@ html, body {
 }
 
 .pt-screen.dim { background: linear-gradient(180deg, rgba(6, 18, 40, 0.55), rgba(6, 18, 40, 0.85)); }
-.pt-screen.passthrough { pointer-events: none; }
-.pt-screen.passthrough > * { pointer-events: auto; }
+/* #ui prefix: `#ui > *` would otherwise win and swallow the mouse meant for the 3D view. */
+#ui > .pt-screen.passthrough { pointer-events: none; }
+#ui > .pt-screen.passthrough > * { pointer-events: auto; }
 
 .pt-panel {
     background: var(--panel);

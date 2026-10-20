@@ -401,6 +401,13 @@ export function buildCarModel({ kind = 'player', color = 0xe0202f, envMap = null
             label.position.set(0, 2.4, 0);
             label.scale.set(3.2, 0.8, 1);
             label.renderOrder = 10;
+            // Fade the tag out as the camera closes in, per view (split-screen), so a rival
+            // passing right by the camera never fills the screen with its name.
+            const cp = new THREE.Vector3(), lp = new THREE.Vector3();
+            label.onBeforeRender = (r, sc, cam) => {
+                const d = cam.getWorldPosition(cp).distanceTo(label.getWorldPosition(lp));
+                label.material.opacity = Math.max(0, Math.min(1, (d - 4) / 6));
+            };
             root.add(label);
         },
         dispose() {

@@ -10,7 +10,7 @@ import { makeCatalog } from './game/catalog.js';
 import * as levels from './levels/index.js';
 import { NullRenderer, NullAudio, hardenRenderer, hardenAudio } from './game/stubs.js';
 import { Backdrop } from './game/backdrop.js';
-import { h, isTypingTarget } from './game/dom.js';
+import { h, isTypingTarget, loadModuleCss } from './game/dom.js';
 import { iconSvg } from './game/icons.js';
 import { currentAccount } from './game/account.js';
 import menu from './game/menu.js';
@@ -217,7 +217,8 @@ class App {
         if (this._lazy.has(id)) return this._lazy.get(id);
         let screen;
         try {
-            const mod = await import(LAZY_SCREENS[id]);
+            // The stylesheet loads alongside the code so the screen never flashes unstyled.
+            const [mod] = await Promise.all([import(LAZY_SCREENS[id]), loadModuleCss(id)]);
             screen = mod.default || mod.screen;
             if (!screen || typeof screen.enter !== 'function') throw new Error(`${LAZY_SCREENS[id]} has no default screen export`);
         } catch (e) {

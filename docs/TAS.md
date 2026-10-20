@@ -446,3 +446,135 @@ longer pedal edits) or bruteforcing one window at a time pays off.
 - Bruteforce in `bruteforce-worker.js`; on `improvement`, offer
   `InputTimeline.decode(msg.inputs)` as a new version (serialize it to show the script).
 - Save projects as `{ trackId, script, notes }` under the `tas` storage key.
+
+## TAS Studio (the screen)
+
+The in-game studio (menu → TAS Studio, or **TAS Studio** on a replay) is built on the
+engine above. Files:
+
+| file | what |
+| --- | --- |
+| `js/tas/studio.js` | the screen (`{ id: 'tas', enter, exit }`): layout, project lifecycle, transport, savestates, record mode, ghost, keys |
+| `js/tas/studio-timeline.js` | `TimelineCanvas`: the piano roll (ruler, speed, steering graph, gas / brake / respawn rows, overview) |
+| `js/tas/studio-script.js` | `ScriptEditor`: textarea + line gutter with live parse, errors / warnings, the command at the cursor |
+| `js/tas/studio-bf.js` | `BruteforcePanel`: form, worker, progress, improvement history, apply / ghost |
+| `js/tas/studio-model.js` | pure logic (Node-tested in `tools/tests/tas-studio.test.mjs`): view maths, edits, undo, markers, readouts, bruteforce form → options, projects |
+| `css/tas.css` | styles (loaded with the screen through `loadModuleCss`) |
+
+**Params.** `app.goto('tas', params)`:
+
+| params | opens |
+| --- | --- |
+| `{ track, replay }` | a new project from that run (the Replays screen and the replay viewer send this) |
+| `{ track, start? }` | a new project on `track` (id or JSON); `start`: `'autopilot'` (default), `'empty'`, `'emperor'` |
+| `{ project: name }` | a saved project |
+| `{ resume: true }` or `{}` | the project open when the studio was last left (kept in memory for the page session; Watch comes back through it); with nothing remembered, A01 from the autopilot and the Project tab |
+
+Any of these may add `onExit()`: Back calls it instead of going to the menu (the AI
+Lab and Replays send one so Back returns there). It is kept across Watch and back.
+
+**Model.** One `TasRunner` per project; the timeline is the truth. Every edit (roll,
+script, bruteforce apply, recording, undo) goes through the timeline; the runner drops
+only the states after the edited tick, `trace()` is rebuilt 120 ms after the last edit
+(markers, speed row, splits, end of run), and the script text is re-serialised 160 ms
+later unless the script editor has focus. A script that parses **without errors** is
+applied with `timeline.copyFrom` (one notification from the first changed tick); a
+script with errors leaves the timeline alone and lists the problems by line.
+Re-serialising keeps the header directives (`track`, `hash`, `name`, `time` are rewritten)
+but not free comments between commands: the canonical form is what comes back.
+
+**3D view.** The scene is drawn only in the free area (`renderer.setViewports` with the
+view element's rectangle; reset on exit). Cameras: chase, close, orbit, free, cockpit,
+top. The overlay shows tick, race time (ms), speed (km/h, 3 decimals), position,
+velocity, yaw / pitch / roll (degrees; yaw 0 = +Z, + = towards +X; pitch + = nose up;
+roll + = right side down), surface and wheels on the ground, state (airborne,
+drifting, gear, checkpoints, lap), pad effects and the input at the cursor. The splits
+box lists checkpoint times and, with a ghost, the delta against it (`compareTimelines`).
+
+**Ghost.** Off, the run as the session started, the Emperor run, the personal best, the
+last save, or the bruteforce best ("Show as ghost"). It is a `GhostRun` drawn as a
+ghost car, a faint second steering line on the roll and split deltas.
+
+**Piano roll.** Click / drag the ruler or the speed row to seek (scrub). Draw tool:
+drag in the steering row to draw analog steering (snaps to 0 and full lock near them,
+Alt = 1/8 steps), click / drag in the gas or brake row to paint the pedal (the first
+tick decides on or off), click the respawn row to toggle a respawn. Select tool (or
+Shift-drag with any tool) selects a range. Wheel zooms around the pointer, Shift-wheel
+or a horizontal swipe scrolls, the overview strip drags the view. Markers: checkpoints
+(cyan), laps and finish (gold), respawns (dashed), savestate slots (numbered flags,
+dim when stale), the loop region (amber). The darker area after the timeline's end is
+the held last input.
+
+**Edits** (undoable, 80 steps): copy, cut (copy + clear), paste over at the selection
+or cursor, paste-insert, clear to neutral, remove ticks (later inputs move earlier),
+insert ticks holding the previous input, move the selection a tick (the gap holds the
+neighbouring input), steer the selection ±1024 (Shift ±8192).
+
+**Transport.** Play / pause, frame forward (steps with events, so particles and sounds
+play), frame back (a seek: the cache keeps it ~0.4 ms), ±10 ticks with Shift, ±1 s with
+Ctrl, start / end, previous / next checkpoint, jump to a typed time (`12.34`,
+`1:02.50` or `t1234`), speed 0.05×–4× (`loop.timeScale`), loop the selection. The
+cursor may run 1.5 s past the finish so the line can be inspected.
+
+**Savestates.** Shift+1…0 saves the cursor's exact state, 1…0 loads it
+(`runner.save/load`, so a slot whose earlier inputs changed re-simulates). Slot ticks
+are saved with the project and rebuilt on load.
+
+**Record mode** (R): after a short "get ready" the live input from `app.controls`
+(keyboard, gamepad analog stick, touch) overwrites the timeline tick by tick from the
+cursor, at a chosen slow motion (0.1×–1×). A fall queues a respawn on the next tick as
+in a race; Enter respawns. R or Esc stops; "keep rest" keeps the inputs after the stop
+point, "cut after" truncates there. The whole take is one undo step.
+
+**Bruteforce tab.** Target (finish, checkpoint N, speed at a time, reach a position —
+closest by a time or distance at it, "Car pos" fills it from the cursor), window
+(from / to times, from the selection or the cursor), rules (changes per iteration,
+seed, steer range / span, shift range, weights, iterations), Start / Stop in
+`bruteforce-worker.js`, live iterations and rate, start and best scores, gain, and the
+improvement history (click one to apply that version). **Apply to timeline** replaces
+the timeline with the best run (undoable); the worker runs on a copy of the timeline as
+it was at Start.
+
+**Project tab.** Name and notes, new run (track picker: campaign, platform, training,
+your tracks, dev samples; start from autopilot, empty, Emperor, personal best or a saved
+replay of that track), import a script (a `# track:` header switches track) or a replay
+code / JSON, export the script or a replay code, saved projects (open / delete).
+Projects live in storage `tas` as `{ [name]: { trackId, track? (custom tracks are
+embedded), script, notes, slots: [{ name, tick }], cursor, result, updated } }`.
+
+**Top bar.** Save (Ctrl+S), **Validate** (builds a fresh world, records the timeline
+with `toReplay`, checks it with `verifyReplay` and compares with the studio's run:
+final time, tick count, match), **Watch** (the replay viewer; Back returns to the
+studio), **Save as replay** (into Replays, finished runs only), **Keys** (shortcut list).
+
+### Keys
+
+| key | |
+| --- | --- |
+| Space | play / pause |
+| `,` `.` (← → unless the free camera is on) | frame back / forward; Shift ×10, Ctrl ±1 s |
+| Home / End, PageUp / PageDown | start / end, previous / next checkpoint |
+| `[` `]` | speed |
+| 1…0 / Shift+1…0 | load / save savestate |
+| R, L, C, G | record, loop selection, next camera, ghost on / off |
+| D / V | draw / select tool |
+| Ctrl+C / X / V, Ctrl+Shift+V | copy / cut / paste over, paste insert |
+| Delete, Shift+Delete, Insert | clear, remove ticks, insert ticks |
+| Alt+← → | move the selection a tick (Shift ×10) |
+| `-` `=` | steer the selection left / right |
+| Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo |
+| Ctrl+A, Esc | select the whole timeline, clear selection / stop recording (with nothing selected, Esc is Back) |
+| Ctrl+Enter in the script | parse now |
+
+Keys typed into the script, time box and form fields stay there.
+
+### Checked in headless Chrome
+
+A01 from the autopilot (0:24.97), drawing steering (cache dropped from the edit, finish
+recomputed, script re-serialised, undo restores 0:24.97), seeks (~0.4 ms after the trace),
+frame advance / back, savestates by key and API, 400 bruteforce iterations from 18.00 in
+the worker (~130 it/s under SwiftShader, 0:24.97 → 0:24.86) and Apply, Validate (fresh
+world, `verifyReplay` ok, matches), save / reload a project with its slot, Watch and
+back (resume), a project from a replay, Save as replay, record mode at 0.25× with
+ArrowUp held, the Emperor ghost with split deltas, loop playback, script errors by
+line, 1280×720 and 1024×600.

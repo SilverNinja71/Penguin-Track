@@ -3,7 +3,8 @@
 A snowy, Trackmania-style time attack racer for the browser. You drive a penguin in a little
 snow racer through icy 3D tracks with loops, ski jumps, banked turns and boost pads, and you
 chase your own ghost down to the hundredth. Everything runs as plain ES modules: no build step
-and no npm packages. The only third-party code is the vendored Three.js in `vendor/`.
+and no npm packages. The only third-party code is the vendored Three.js in `vendor/`, plus
+PeerJS, which online rooms fetch from unpkg only when you open one.
 
 The physics is deterministic, so the same inputs always give the same run. That one fact powers
 the replays, the ghosts, the TAS tools and the AI training kit.
@@ -51,7 +52,25 @@ To drift on snow or powder, tap the brake while steering hard above 70 km/h.
   checkpoint. You can also turn on the Emperor's ghost, or race any saved replay.
 - **Replays.** Every personal best is kept. You can save more runs, scrub through them at 0.25×
   to 4× with four cameras, and share them as `PTR` codes. Custom tracks travel inside the code.
-- **My Tracks.** Import a friend's `PT1.` share code and race it.
+- **Track editor.** Snap blocks together on a 48×48 snowfield with the mouse or only the
+  keyboard: roads, bends, slopes, loops, jumps, pads and gates, three surfaces, decor, four
+  skies. Live checks flag open road ends and missing gates. Test-drive it (or let the
+  autopilot) to validate it and set its medals, then save it to My Tracks and share it as a
+  `PT1.` code. See [docs/EDITOR.md](docs/EDITOR.md).
+- **My Tracks.** Your tracks and imported share codes: race, edit, share or delete them.
+- **TAS Studio.** Open any replay (or start from the autopilot) and edit it tick by tick:
+  a piano roll for steering and pedals, a script editor, savestates, frame stepping, a
+  comparison ghost, record mode at slow motion and a bruteforce search in a worker.
+  Validate re-simulates the run from scratch; save it as a replay to watch or share.
+  See [docs/TAS.md](docs/TAS.md).
+- **AI Lab.** Train a flock of penguin drivers with neuroevolution in Web Workers and watch
+  every generation drive, with their sensor rays and the network's choices. Save a driver,
+  race against it, watch its run or open it in the TAS Studio. A demo driver is included.
+  See [docs/AI.md](docs/AI.md).
+- **Multiplayer.** Hot-seat matches for 2–8 players with a playlist and points, two-player
+  split-screen (keyboard and gamepads), and online ghost rooms with friends over PeerJS
+  (the host re-simulates every finish before it counts). See
+  [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
 - **Gold.** With a site account signed in, a medal you earn for the first time adds gold to the
   shared profile: Emperor 60, Gold 30, Silver 15, Bronze 5.
 - **Polish.**
@@ -59,10 +78,6 @@ To drift on snow or powder, tap the brake while steering hard above 70 km/h.
   - Four skies: day, sunset, night and aurora.
   - An attract mode drives the tracks behind the menus.
   - Gamepad and touch support, and a reduced-motion option.
-
-The Track Editor, TAS Studio, AI Lab and Multiplayer menu entries are still being built. For
-now they show a placeholder. The TAS and AI engines underneath them already work from the
-command line (see below).
 
 ## TAS quick start
 
@@ -76,6 +91,8 @@ node tools/tas.mjs bruteforce A01 a01.txt --iterations 2000 --out a01-fast.txt
 node tools/tas.mjs to-replay a01-fast.txt --code                    # paste into Replays > Import code
 ```
 
+In the game, press TAS Studio on any replay (Replays, or the replay viewer) to edit it there.
+
 ## AI quick start
 
 The AI kit has a gym-style environment, a neuroevolution trainer with no dependencies, and a
@@ -87,8 +104,9 @@ node tools/train.mjs --eval models/demo-S01.json                    # the demo d
 cd python && python3 random_agent.py --track A01                    # Python bridge smoke test
 ```
 
-To watch a trained driver in the game, go to Replays > Import code > Choose file. Pick the model
-`.json`, which carries its best run, or any replay JSON. Then press Watch or Race ghost.
+In the game, the AI Lab trains drivers in the browser. To bring in a driver trained here, open
+AI Lab > Drivers > Import and pick the model `.json` (or a `.state.json` to keep training).
+Replays > Import code also takes a model file or any replay JSON, to watch or race its run.
 
 If `node` is not on your `PATH`, set `PENGUINTRACK_NODE=/path/to/node` for the Python side.
 
@@ -105,7 +123,11 @@ You can add debug flags to the game URL:
 - `?play=A01` starts straight in a race.
 - `?autopilot=1` lets the built-in driver race for you.
 - `?fast=4` runs four times faster.
-- `?screen=settings` opens a screen directly.
+- `?screen=settings` opens a screen directly (`editor`, `tas`, `ai`, `mp`, `mytracks`, …).
+- `?noattract=1` turns off the attract-mode drive behind the menus.
+- `?screen=mp&mp=local` opens an online room without the network, with an autopilot bot.
+
+`window.__pt` is the app object (see [docs/GAME.md](docs/GAME.md)).
 
 Dev pages live in `dev/`: `world-viewer.html`, `render-demo.html` and `audio-demo.html`.
 
@@ -120,5 +142,7 @@ The docs:
 | [RENDER.md](docs/RENDER.md) | the renderer |
 | [AUDIO.md](docs/AUDIO.md) | audio |
 | [LEVELS.md](docs/LEVELS.md) | the campaign |
-| [TAS.md](docs/TAS.md) | TAS tools |
-| [AI.md](docs/AI.md) | AI kit |
+| [EDITOR.md](docs/EDITOR.md) | the track editor |
+| [TAS.md](docs/TAS.md) | TAS engine, CLI and TAS Studio |
+| [AI.md](docs/AI.md) | AI kit, trainers and AI Lab |
+| [MULTIPLAYER.md](docs/MULTIPLAYER.md) | hot-seat, split-screen and online rooms |

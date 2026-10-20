@@ -101,13 +101,15 @@ const results = {
             type: 'button', class: opts.cls || '', onclick, 'data-autofocus': opts.focus || null, 'data-sound': opts.sound || null,
         }, h('span.pt-ico', { html: iconSvg(iconName, 20) }), label, opts.kbd ? h('span.pt-kbd', opts.kbd) : null);
         this.saveBtn = B('Save replay', 'save', () => this.saveReplay());
-        const backLabel = mode === 'test' ? 'Back to editor' : 'Back';
+        const pp = params.playParams || {};
+        const backLabel = pp.exitLabel || (mode === 'test' ? 'Back to editor' : 'Back');
+        this.canRetry = pp.retry !== false;
         const actions = h('div.res-actions',
-            B('Retry', 'retry', () => this.retry(), { cls: nextId ? '' : 'primary', focus: !nextId, kbd: '⌫' }),
+            this.canRetry ? B('Retry', 'retry', () => this.retry(), { cls: nextId ? '' : 'primary', focus: !nextId, kbd: '⌫' }) : null,
             nextId ? B('Next track', 'next', () => app.goto('play', { track: nextId, mode: 'campaign' }), { cls: 'primary', focus: true }) : null,
             B('Watch replay', 'film', () => this.watch()),
             this.saveBtn,
-            B(backLabel, 'back', () => this.back(), { cls: 'ghost', sound: 'back', kbd: 'Esc' }));
+            B(backLabel, 'back', () => this.back(), { cls: this.canRetry ? 'ghost' : 'primary', focus: !this.canRetry && !nextId, sound: 'back', kbd: 'Esc' }));
 
         const panel = h('div.res-panel.pt-panel',
             h('div.res-head',
@@ -201,7 +203,7 @@ const results = {
 
     onKey(e) {
         if (e.key === 'Backspace' || e.key === 'Delete') {
-            this.retry();
+            if (this.canRetry) this.retry();
             return true;
         }
         return false;

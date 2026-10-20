@@ -11,7 +11,8 @@ this document disagree, fix one of them so they match.
   files (GitHub Pages serves the repo root; the game lives at `/penguintrack/`).
   The only third-party code is the vendored Three.js r185.1 in `vendor/`
   (`import * as THREE from 'three'` via the import map in `index.html`;
-  addons: `three/addons/BufferGeometryUtils.js`, `three/addons/Sky.js`).
+  addons: `three/addons/BufferGeometryUtils.js`, `three/addons/Sky.js`). The one
+  exception: online rooms (`js/mp/net.js`) load PeerJS 1.5.4 from unpkg on demand.
 - Relative imports always include the `.js` extension.
 - Style follows the repo `.editorconfig`: 4-space indent, LF, final newline.
   Comments: short, explain *why*, match the existing density (sparse).
@@ -29,7 +30,7 @@ penguintrack/
   index.html               app shell, import map, loads js/main.js            [shell]
   css/style.css            design tokens + shared components                  [shell; tokens fixed below]
   css/<module>.css         per-module styles (game.css for the shell, audio.css for the audio bench,
-                           editor.css, tas.css, ai.css, mp.css)
+                           editor.css, tas.css, ai.css, mp.css: loaded with their lazy screen)
   favicon.svg
   vendor/                  three.module.min.js, three.core.min.js, addons/   [do not edit]
   js/main.js               bootstrap, App object, screen router               [shell]
@@ -51,21 +52,47 @@ penguintrack/
     format.js              formatTime(): the one race-time format for every screen
     samples.js             six dev fixture tracks S01–S06 (tests, demos)
   js/levels/               official tracks + campaign index                   [levels]
+    index.js               CAMPAIGNS, getTrack/trackInfo; baked.js holds the baked medals + Emperor ghosts
+    build.js, scenery.js   track-building helpers; one file per tier (fresh-powder … polar-night,
+                           platform, training); medals.js medal rules
   js/render/               Three.js rendering                                 [render]
-  js/audio/                WebAudio procedural sound                          [audio]
-  js/game/                 play mode, menus, HUD, storage, controls, results  [shell]
-  js/editor/               track editor                                       [editor]
-  js/tas/                  TAS studio, script language, bruteforce            [tas]
-  js/ai/                   gym-style env, models, trainers, AI lab UI         [ai]
-  js/mp/                   hot-seat, split-screen, online ghost rooms         [mp]
-  dev/                     dev-only pages (world-viewer, render-demo, audio-demo); not linked from the game
-  tools/                   Node CLIs: test (tests/*.test.mjs), sim-probe, verify-levels, bake-levels,
-                           headless env server, train, tas
+    renderer.js            GameRenderer (contract in RENDER.md): world, cars, cameras, viewports
+    trackmesh.js, models.js, props.js, scenery.js, environment.js, effects.js, carmodel.js,
+    cameras.js, textures.js, layout.js
+  js/audio/                WebAudio procedural sound (audio, synth, sfx, music, carvoice)   [audio]
+  js/game/                 the shell                                          [shell]
+    menu, campaign, play/race/hud/minimap, results, replays/replayer, mytracks,
+    settings(-screen), help   the shell screens and the race
+    catalog, records, storage, replaycode, ghost, controls, loop, backdrop, account
+    dom.js                 h(), loadModuleCss() and other DOM helpers shared by every screen
+    ui.js, icons.js        dialogs/toasts/code dialog; SVG icons
+    stubs.js, unavailable.js  null renderer/audio; stand-in for a lazy screen that failed to load
+  js/editor/               track editor (EDITOR.md)                           [editor]
+    editor.js              the screen + EditorSession (DOM, input, test drive, save/share)
+    model.js               pure editing model: placement, snapping, undo, validation records
+    view3d.js, thumbs.js   grid/ghost/cursor overlays; palette thumbnails
+  js/tas/                  TAS engine + TAS Studio (TAS.md)                   [tas]
+    script.js, timeline.js, runner.js, bruteforce.js, bruteforce-worker.js   the engine
+    studio.js              the TAS Studio screen
+    studio-timeline.js, studio-script.js, studio-bf.js, studio-model.js       piano roll, script tab,
+                           bruteforce panel, pure helpers/projects
+  js/ai/                   AI kit + AI Lab (AI.md)                            [ai]
+    env.js, policy.js, nn.js, neuro.js, pool.js, worker.js, tracks.js        env, networks, trainers
+    lab.js                 the AI Lab screen
+    lab-logic.js, lab-playback.js, lab-chart.js, lab-overlay.js, lab-help.js  pure helpers, field
+                           replay, training chart, rays overlay, explainer
+  js/mp/                   multiplayer (MULTIPLAYER.md)                       [mp]
+    mp.js                  the screen (hot-seat / split-screen / online tabs)
+    hotseat.js, hotseat-view.js; racer.js, splitinput.js, split-view.js; protocol.js, room.js,
+    net.js (PeerJS, loaded on demand), online-view.js; scoring.js, common.js
+  dev/                     dev-only pages (world-viewer, render-demo, audio-demo + audio-check.js); not linked from the game
+  tools/                   Node CLIs: test (tests/*.test.mjs, one file per module), sim-probe,
+                           verify-levels, bake-levels, headless env server, train, tas; lib/ test worlds
   python/                  gymnasium wrapper + training examples
   models/                  trained AI drivers (demo-S01.json)                  [ai]
   tas-examples/            example TAS scripts                                  [tas]
   docs/                    this file, CORE_API.md, TRACK_FORMAT.md, GAME.md, RENDER.md, AUDIO.md,
-                           LEVELS.md, TAS.md, AI.md (EDITOR.md with the editor)
+                           LEVELS.md, EDITOR.md, TAS.md, AI.md, MULTIPLAYER.md
   package.json             "type": "module", scripts only, no dependencies
   README.md
 ```

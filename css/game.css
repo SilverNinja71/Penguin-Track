@@ -365,7 +365,7 @@ a.pt-btn { text-decoration: none; }
 .hud-effect.cool { color: #d4f6ff; border-color: rgba(184, 241, 255, 0.6); }
 .hud-effect.warn { color: #ffe08a; border-color: rgba(255, 207, 90, 0.75); }
 
-/* ---------- Coming soon ---------- */
+/* ---------- Screen unavailable (lazy screen failed to load) ---------- */
 
 .soon-screen { align-items: center; justify-content: center; background: linear-gradient(180deg, rgba(6, 18, 40, 0.7), rgba(6, 18, 40, 0.88)); }
 .soon-card { position: relative; z-index: 1; max-width: 520px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 28px 24px; }

@@ -69,7 +69,7 @@ const replays = {
         const actions = [
             B('Watch', 'play', () => this.watch(it), 'primary'),
             B('Race ghost', 'ghost', () => this.race(it)),
-            B('TAS Studio', 'tas', () => app.goto('tas', { track, replay: it.replay })),
+            B('TAS Studio', 'tas', () => app.goto('tas', { track, replay: it.replay, onExit: () => app.goto('replays') })),
             B('Export', 'export', () => this.exportCode(it)),
         ];
         if (!it.pb) {

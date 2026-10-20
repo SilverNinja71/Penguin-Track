@@ -1,0 +1,235 @@
+/* TAS Studio (js/tas/studio*.js). Builds on the tokens and .pt-* components in style.css. */
+
+.tas-screen {
+    padding: 8px;
+    gap: 8px;
+    pointer-events: none;
+}
+.tas-screen > * { pointer-events: auto; }
+.tas-screen .pt-btn.small { font-size: 13px; padding: 5px 9px 3px; gap: 5px; }
+.tas-screen .pt-btn.small .pt-ico svg { width: 15px; height: 15px; }
+
+/* ---------- top bar ---------- */
+.tas-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    backdrop-filter: blur(8px);
+}
+.tas-titles { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
+.tas-title { font-weight: 700; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32vw; }
+.tas-track { font-size: 12px; }
+.tas-result { margin-left: 8px; padding: 3px 10px; border-radius: 999px; background: rgba(107, 255, 176, 0.12); color: var(--good); font-size: 13px; }
+.tas-result.bad { background: rgba(255, 107, 129, 0.14); color: var(--bad); }
+.tas-result:empty { display: none; }
+
+/* ---------- main split ---------- */
+.tas-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 8px;
+    pointer-events: none;
+}
+.tas-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.tas-view { flex: 1; min-height: 120px; position: relative; pointer-events: none; }
+.tas-bottom, .tas-side { pointer-events: auto; }
+
+/* ---------- 3D overlay ---------- */
+.tas-info {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    margin: 0;
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 10px;
+    row-gap: 1px;
+    font-size: 12px;
+    max-width: calc(100% - 16px);
+    background: rgba(8, 22, 46, 0.72);
+    pointer-events: none;
+}
+.tas-info dt { color: var(--muted); }
+.tas-info dd { margin: 0; white-space: pre; color: var(--text); }
+.tas-splits {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    background: rgba(8, 22, 46, 0.72);
+    pointer-events: none;
+    max-height: calc(100% - 16px);
+    overflow: hidden;
+}
+.tas-splits table { border-collapse: collapse; }
+.tas-splits td { padding: 0 6px 0 0; color: var(--muted); }
+.tas-splits tr.passed td { color: var(--text); }
+.tas-splits tr.fin td { border-top: 1px solid var(--line); padding-top: 2px; }
+.tas-splits tr td.ahead { color: var(--accent); }
+.tas-splits tr td.behind { color: var(--bad); }
+.tas-splits-head { font-size: 11px; margin-bottom: 2px; }
+.tas-viewctl { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; pointer-events: auto; }
+.tas-viewctl .pt-input { background: rgba(8, 22, 46, 0.82); }
+.tas-banner {
+    position: absolute;
+    left: 50%;
+    top: 14px;
+    transform: translateX(-50%);
+    padding: 6px 16px;
+    border-radius: 999px;
+    background: rgba(160, 20, 45, 0.85);
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+}
+
+/* ---------- bottom: transport + roll ---------- */
+.tas-bottom { padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 5px; border-radius: var(--radius-sm); }
+.tas-transport, .tas-rollbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tas-transport .pt-seg .pt-btn { min-width: 30px; justify-content: center; }
+.tas-play { min-width: 40px !important; }
+.tas-play svg { width: 18px; height: 18px; }
+.tas-mini { width: auto; padding: 3px 6px; font-size: 13px; min-height: 0; }
+.tas-time { width: 84px; padding: 3px 7px; font-family: var(--mono); font-size: 13px; }
+.tas-jump { width: 92px; }
+.tas-inline { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.tas-recgroup { display: inline-flex; gap: 4px; align-items: center; }
+.tas-rec .tas-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); display: inline-block; }
+.tas-rec.active { background: rgba(160, 20, 45, 0.85); border-color: var(--bad); box-shadow: none; }
+.tas-screen.recording .tas-bottom { border-color: var(--bad); }
+.tas-selinfo { font-size: 12px; }
+.tas-sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 2px; }
+.tas-rollbar .pt-btn.small { padding: 4px 8px 2px; font-size: 12.5px; }
+.tas-ghostsel { max-width: 170px; }
+.tas-rollhost { position: relative; height: clamp(140px, 27vh, 220px); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.tas-roll { display: block; cursor: crosshair; touch-action: none; }
+.tas-roll:focus-visible { outline: 2px solid var(--accent-2); outline-offset: -2px; }
+.tas-rollhost.select .tas-roll { cursor: text; }
+
+/* ---------- side panel ---------- */
+.tas-side {
+    width: clamp(280px, 25vw, 380px);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+}
+.tas-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tas-tab {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 600;
+    padding: 8px 6px 6px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+.tas-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.tas-tab:focus-visible { outline: 2px solid var(--accent-2); outline-offset: -2px; }
+.tas-panes { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tas-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: thin; }
+.tas-pane > * { flex: 1; min-height: 0; }
+
+.tas-sec { padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.tas-sec h3, .tas-h { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); display: inline; }
+.tas-h { display: block; padding: 8px 12px 2px; }
+details.tas-sec summary { cursor: pointer; }
+.tas-field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); flex: 1; min-width: 0; }
+.tas-field .pt-input { padding: 4px 7px; font-size: 13px; }
+.tas-field-row { display: flex; gap: 6px; align-items: flex-end; }
+.tas-num { width: 100%; }
+.tas-tight { gap: 6px; }
+
+/* script editor */
+.tas-script { display: flex; flex-direction: column; min-height: 0; }
+.tas-script-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid var(--line); }
+.tas-script-status { color: var(--good); }
+.tas-script-status.bad { color: var(--bad); }
+.tas-script-status.warn { color: var(--warn); }
+.tas-editor { flex: 1; min-height: 120px; display: flex; background: rgba(4, 12, 28, 0.6); }
+.tas-gutter {
+    width: 46px;
+    flex: none;
+    overflow: hidden;
+    padding: 6px 0 var(--ln-pad, 72px);
+    font: 11px/18px var(--mono);
+    color: rgba(157, 184, 217, 0.55);
+    text-align: right;
+    border-right: 1px solid var(--line);
+    user-select: none;
+}
+.tas-ln { padding-right: 6px; height: 18px; }
+.tas-ln[data-tick] { cursor: pointer; color: var(--muted); }
+.tas-ln[data-tick]:hover { color: var(--accent); }
+.tas-ln.now { background: rgba(127, 220, 255, 0.18); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+.tas-ln.error { background: rgba(255, 107, 129, 0.28); color: #fff; }
+.tas-ln.warn { background: rgba(255, 207, 90, 0.22); color: #fff; }
+.tas-code {
+    flex: 1;
+    min-width: 0;
+    resize: none;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font: 12.5px/18px var(--mono);
+    padding: 6px 8px 72px;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 4;
+    user-select: text;
+}
+.tas-code:focus { box-shadow: inset 0 0 0 1px var(--accent); }
+.tas-problems { margin: 0; padding: 4px 0; list-style: none; max-height: 96px; flex: none !important; border-top: 1px solid var(--line); font-size: 12px; }
+.tas-problems li { padding: 2px 10px; cursor: pointer; }
+.tas-problems li.error b { color: var(--bad); }
+.tas-problems li.warn b { color: var(--warn); }
+.tas-problems li:hover, .tas-problems li:focus-visible { background: rgba(255, 255, 255, 0.06); outline: none; }
+
+/* bruteforce */
+.tas-bf { display: flex; flex-direction: column; }
+.tas-bf > .pt-row { padding: 8px 12px 0; }
+.tas-stats { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 6px 12px; font-size: 12px; }
+.tas-stats dt { color: var(--muted); }
+.tas-stats dd { margin: 0; }
+.tas-live { color: var(--accent); }
+.tas-history { list-style: none; margin: 0; padding: 0 0 8px; font-size: 12px; max-height: 220px; flex: none !important; }
+.tas-history li { padding: 3px 12px; cursor: pointer; border-bottom: 1px solid rgba(200, 230, 255, 0.06); }
+.tas-history li:hover, .tas-history li:focus-visible { background: rgba(127, 220, 255, 0.1); outline: none; }
+
+/* project */
+.tas-project { display: flex; flex-direction: column; }
+.tas-projlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tas-proj { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.tas-proj-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tas-validate { margin: 0; padding-left: 18px; line-height: 1.5; }
+.tas-validate .good { color: var(--good); }
+.tas-validate .bad { color: var(--bad); }
+.tas-keys { max-height: 60vh; }
+.tas-keys table { border-collapse: collapse; font-size: 14px; }
+.tas-keys td { padding: 3px 10px 3px 0; vertical-align: top; }
+
+/* ---------- small screens ---------- */
+@media (max-width: 1100px) {
+    .tas-title { max-width: 22vw; }
+    .tas-side { width: 290px; }
+}
+@media (max-height: 640px) {
+    .tas-screen { padding: 6px; gap: 6px; }
+    .tas-top { padding: 3px 8px; }
+    .tas-track { display: none; }
+    .tas-rollhost { height: 140px; }
+    .tas-info { font-size: 11px; padding: 5px 8px; }
+}

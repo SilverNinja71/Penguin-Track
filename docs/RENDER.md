@@ -120,7 +120,9 @@ r.removeCamera(cam2);
 ```
 
 Rects are normalised 0..1 from the canvas' top-left corner. Every rig updates once per
-frame with its viewport's aspect ratio.
+frame with its viewport's aspect ratio. A rect may carry `before(rect)`, called right
+before that viewport is drawn (split-screen uses it to show each player's own car
+solid and the rival as a ghost: toggle `setVisible` on the handles).
 
 ### Events
 

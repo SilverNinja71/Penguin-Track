@@ -27,7 +27,7 @@ export class RaceSession {
         this.world = world;
         this.mode = mode;
         this.params = params;
-        this.saves = mode === 'campaign' || mode === 'custom';
+        this.saves = (mode === 'campaign' || mode === 'custom') && params.saveRecords !== false;
         this.inp = { steer: 0, gas: false, brake: false, respawn: false };
         this.prev = null;
         this.cur = null;
@@ -81,6 +81,7 @@ export class RaceSession {
             app.loop.maxTicksPerFrame = Math.ceil(25 * app.debug.fast * 4);
         }
         app.loop.start(() => this.tick(), (a, dt) => this.frame(a, dt));
+        if (typeof this.params.onStart === 'function') this.params.onStart(this);
     }
 
     _buildGhosts() {
@@ -115,6 +116,8 @@ export class RaceSession {
     /** Back to the line with a fresh countdown (Backspace / Delete, also right after finishing). */
     restart(first = false) {
         const { app, sim } = this;
+        // A host screen (hot-seat) may refuse another run, e.g. when the attempts are used up.
+        if (!first && typeof this.params.onRestart === 'function' && this.params.onRestart(this) === false) return;
         if (!first && this.newRecord) {
             // A new personal best becomes the ghost to beat, like Trackmania.
             this.record = getRecord(app.storage, this.track.id, this.world.hash);
@@ -257,6 +260,7 @@ export class RaceSession {
         const diff = pbBefore && Number.isFinite(pbBefore.bestMs) ? ev.timeMs - pbBefore.bestMs : null;
         const text = diff == null ? formatTime(ev.timeMs) : `${formatTime(ev.timeMs)}  ${formatTime(diff, { style: 'short', sign: true })}`;
         this.hud.banner(text, 'finish ' + (diff == null ? '' : diff <= 0 ? 'ahead' : 'behind'), 0);
+        if (typeof this.params.onFinish === 'function') this.params.onFinish(this.result, this);
     }
 
     /** Shows the results; the 3D view keeps running behind them (stage hand-off). */
@@ -383,7 +387,7 @@ export class RaceSession {
     }
 
     _buildPause() {
-        const quitLabel = this.mode === 'test' ? 'Back to editor' : 'Quit';
+        const quitLabel = this.params.exitLabel || (this.mode === 'test' ? 'Back to editor' : 'Quit');
         const btn = (label, iconName, onclick, cls = '', keys = null) => h('button.pt-btn.big', { type: 'button', class: cls, onclick, 'data-autofocus': cls === 'primary' || null },
             h('span.pt-ico', { html: iconSvg(iconName, 22) }), label, keys ? h('span.pt-kbd', keys) : null);
         return h('div.play-pause.pt-hidden', { role: 'dialog', 'aria-label': 'Paused' },

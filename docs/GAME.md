@@ -81,20 +81,22 @@ attract backdrop, removes the backdrop car when the new screen is not a menu, se
 
 The editor, TAS Studio, AI Lab and multiplayer are imported on first use from
 `js/editor/editor.js`, `js/tas/studio.js`, `js/ai/lab.js` and `js/mp/mp.js` (default
-export = the screen object). If the import fails (not built yet, or a syntax error),
-a "still being built" panel stands in, and the next visit tries again. If a lazily
+export = the screen object), together with their stylesheet `css/<id>.css`
+(`loadModuleCss(name)` in `js/game/dom.js` adds a `link[data-pt-css=name]` once; the
+screens call it too, so they work when entered any other way). If the import fails (offline, or a syntax error),
+a "couldn't load" panel (`js/game/unavailable.js`) stands in, and the next visit tries again. If a lazily
 loaded screen's `enter` throws, the same panel shows the error.
 
 | id | params |
 | --- | --- |
 | `menu` | — |
 | `campaign` | `{ select?: trackId }` (opens its tab and focuses its card) |
-| `play` | `{ track: id | TrackJSON, mode: 'campaign'|'custom'|'test'|'replay', replay?, ghosts?: [replay | { replay, label, color }], onExit?(result|null) }` |
+| `play` | `{ track: id | TrackJSON, mode: 'campaign'|'custom'|'test'|'replay', replay?, ghosts?: [replay | { replay, label, color }], onExit?(result|null), onStart?, onRestart?, onFinish?, saveRecords?, retry?, exitLabel? }` |
 | `results` | set by the race: `{ track, mode, result, outcome, playParams, stage }` |
 | `replays` | — |
 | `mytracks` | `{ select?: trackId }` |
 | `settings`, `help` | — |
-| `editor`, `tas`, `ai`, `mp` | whatever those modules define; the shell sends `editor { track? }`, `tas { track, replay }` |
+| `editor`, `tas`, `ai`, `mp` | whatever those modules define; the shell sends `editor { track? }`, `tas { track, replay, onExit? }`; `mp { view?: 'hotseat'|'split'|'online' }` ([MULTIPLAYER.md](MULTIPLAYER.md)) |
 
 ### play
 
@@ -106,6 +108,18 @@ loaded screen's `enter` throws, the same panel shows the error.
   `campaign`, custom → `mytracks`, test → `editor`, replay → `replays`.
 - `result` = `{ finished, timeMs, respawns, splits /* checkpoint times, all laps */,
   lapTimes, replay /* core replay object */, autopilot, pbBefore }`.
+- Hooks for screens that run races of their own design (multiplayer hot-seat, see
+  [MULTIPLAYER.md](MULTIPLAYER.md)); all optional:
+  - `onStart(session)`: once the `RaceSession` runs (`session.screenEl` takes overlays,
+    `session.sim`, `session.state`, `session.params`).
+  - `onRestart(session) → false`: before every restart after the first (Backspace,
+    pause-menu Restart); returning `false` refuses it and the run goes on.
+  - `onFinish(result, session)`: on the finish tick, after the record is saved; the
+    callback may adjust `result` (e.g. `result.pbBefore`) before the results screen.
+  - `saveRecords: false`: `custom` / `campaign` runs save no record and pay no gold.
+  - `retry: false`: the results screen has no Retry (and ignores Backspace). It is read
+    when the results open, so `onFinish` may set it on the params object.
+  - `exitLabel`: text of the pause menu's Quit and the results screen's Back button.
 - `ghosts`: extra ghost runs (for example "race this replay"). The personal-best ghost
   (setting `showGhost`) and the Emperor ghost (`showEmperorGhost`, from
   `levels.authorReplay(id)`) are added automatically. A ghost whose `trackHash` differs
