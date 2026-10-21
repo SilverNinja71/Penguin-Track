@@ -11,14 +11,14 @@ the replays, the ghosts, the TAS tools and the AI training kit.
 
 ## Play it
 
-Play online at https://silverninja71.github.io/penguintrack/.
+Play online at https://silverninja71.github.io/Penguin-Track/.
 
-To run it locally, serve the folder that holds this repo, so the game sits at `/penguintrack/`.
+To run it locally, serve the folder that holds this repo, so the game sits at `/Penguin-Track/`.
 Clone the hub repo [`Empire`](https://github.com/SilverNinja71/Empire) next to it to get the shared site account (`../Empire/shared/accounts.js`) and the "All games" link:
 
 ```sh
 python3 ../Empire/server.py   # or, from the folder above this repo: python3 -m http.server 8080
-# then open http://localhost:8080/penguintrack/
+# then open http://localhost:8080/Penguin-Track/
 ```
 
 Any static file server works. It needs a recent Chrome, Edge, Firefox or Safari with WebGL.

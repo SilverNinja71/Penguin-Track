@@ -8,7 +8,7 @@ this document disagree, fix one of them so they match.
 ## Ground rules
 
 - **Vanilla ES modules, no build, no npm runtime deps.** The game is served as static
-  files (GitHub Pages serves the repo root; the game lives at `/penguintrack/`).
+  files (GitHub Pages serves the repo root; the game lives at `/Penguin-Track/`).
   The only third-party code is the vendored Three.js r185.1 in `vendor/`
   (`import * as THREE from 'three'` via the import map in `index.html`;
   addons: `three/addons/BufferGeometryUtils.js`, `three/addons/Sky.js`). The one
@@ -337,7 +337,7 @@ Shared classes: `.pt-screen` (full overlay), `.pt-panel`, `.pt-btn` (+ `.primary
 ## Tooling
 
 - Run locally: `python3 ../Empire/server.py` (the hub repo cloned next to this one), open
-  `http://localhost:8080/penguintrack/`.
+  `http://localhost:8080/Penguin-Track/`.
 - `node tools/test.mjs` — core unit + determinism tests.
 - `node tools/verify-levels.mjs` — every official track validates, builds, and the
   autopilot finishes within its bronze time; reports times.

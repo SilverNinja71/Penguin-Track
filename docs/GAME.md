@@ -245,7 +245,7 @@ Imports check the inputs (`countInputs`) and the layout hash before saving.
 - `node tools/test.mjs shell` — settings validation, controls → Input (keyboard, gamepad
   dead zone / sensitivity, edges), the loop's accumulator, records and medal gold,
   replay codes (both forms), ghost determinism, the catalog.
-- In a browser (or headless Chrome): serve the repo root, open `/penguintrack/`.
+- In a browser (or headless Chrome): serve the repo root, open `/Penguin-Track/`.
   Checked end to end: menu → campaign → A01 with ArrowUp held (timer and speed rise),
   pause / resume, restart, `?autopilot=1&fast=3&play=A01` → results with a medal →
   Retry with the PB ghost, replays → watch / seek / speed / orbit, export / import codes,
