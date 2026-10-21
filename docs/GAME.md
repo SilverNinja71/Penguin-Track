@@ -10,7 +10,7 @@ is in [ARCHITECTURE.md](ARCHITECTURE.md#app-and-screens-contract-jsmainjs-owned-
 
 | file | what |
 | --- | --- |
-| `index.html` | import map (`three`, `three/addons/`), `<canvas id="view">`, `<div id="ui">`, Baloo 2, the optional `../shared/accounts.js`, boot card, `js/main.js` |
+| `index.html` | import map (`three`, `three/addons/`), `<canvas id="view">`, `<div id="ui">`, Baloo 2, the optional `../Empire/shared/accounts.js`, boot card, `js/main.js` |
 | `js/main.js` | `App`: services, routing, lazy screens, global keyboard / gamepad menu navigation; `window.__pt` |
 | `js/game/storage.js` | `penguintrack:`-prefixed JSON in localStorage (`get / set / update / remove`) |
 | `js/game/settings.js` | defaults, validation, key names, the action list |

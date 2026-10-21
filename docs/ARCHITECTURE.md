@@ -284,7 +284,7 @@ All keys are prefixed `penguintrack:`. Values are JSON.
 | `tas` | saved TAS projects `{ [name]: { trackId, script, notes } }` |
 | `ai` | saved AI models `{ [name]: { trackId, arch, weights, stats } }` |
 
-The shared site account (`../shared/accounts.js`, `window.GameAccounts`) is optional:
+The shared site account (`../Empire/shared/accounts.js`, `window.GameAccounts`) is optional:
 when a player is signed in, first-time medals add gold to the shared profile
 (`spear_mace_user_profile.gold`) — Emperor 60, Gold 30, Silver 15, Bronze 5.
 
@@ -336,7 +336,7 @@ Shared classes: `.pt-screen` (full overlay), `.pt-panel`, `.pt-btn` (+ `.primary
 
 ## Tooling
 
-- Run locally: `python3 server.py` from the repo root (or `./start.sh`), open
+- Run locally: `python3 ../Empire/server.py` (the hub repo cloned next to this one), open
   `http://localhost:8080/penguintrack/`.
 - `node tools/test.mjs` — core unit + determinism tests.
 - `node tools/verify-levels.mjs` — every official track validates, builds, and the

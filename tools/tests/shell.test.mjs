@@ -37,7 +37,7 @@ function memoryStorage() {
     };
 }
 
-/** A signed-in (or guest) shared site account, as ../shared/accounts.js leaves it in localStorage. */
+/** A signed-in (or guest) shared site account, as ../Empire/shared/accounts.js leaves it in localStorage. */
 function fakeSiteAccount(signedIn, gold = 300) {
     const ls = new Map();
     if (signedIn) ls.set('spear_mace_user_profile', JSON.stringify({ username: 'Pingu', gold }));

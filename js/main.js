@@ -159,7 +159,7 @@ class App {
             h('h2.pt-subtitle', 'No 3D on this device'),
             h('p.pt-modal-msg', 'Penguintrack draws its tracks with WebGL, and this browser (or its settings) has it switched off. Try a recent Chrome, Edge, Firefox or Safari, or turn on hardware acceleration. The menus and your saved tracks still work here.'),
             h('div.pt-row.pt-modal-actions',
-                h('a.pt-btn', { href: '../' }, 'Back to the site'),
+                h('a.pt-btn', { href: '../Empire/' }, 'Back to the site'),
                 h('button.pt-btn.primary', { type: 'button', 'data-autofocus': true, onclick: () => close(true) }, 'Look around anyway'))), { label: 'WebGL unavailable' });
     }
 

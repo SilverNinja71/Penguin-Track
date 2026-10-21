@@ -1,4 +1,4 @@
-// The shared site account (../shared/accounts.js, window.GameAccounts) is
+// The shared site account (../Empire/shared/accounts.js, window.GameAccounts) is
 // optional. When a player is signed in, the profile everyone plays with lives
 // in localStorage under 'spear_mace_user_profile'; first-time medals add gold to it.
 const PROFILE_KEY = 'spear_mace_user_profile';

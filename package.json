@@ -14,6 +14,6 @@
     "headless": "node tools/headless.mjs",
     "train": "node tools/train.mjs",
     "tas": "node tools/tas.mjs",
-    "serve": "cd .. && python3 server.py"
+    "serve": "python3 ../Empire/server.py"
   }
 }

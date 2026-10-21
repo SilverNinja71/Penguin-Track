@@ -73,7 +73,7 @@ const menu = {
         this.el = h('div.pt-screen.menu-screen',
             snowfall(),
             h('div.menu-top',
-                h('a.pt-btn.small.ghost.menu-site', { href: '../', 'data-sound': 'back' }, icon('home', 18), 'All games'),
+                h('a.pt-btn.small.ghost.menu-site', { href: '../Empire/', 'data-sound': 'back' }, icon('home', 18), 'All games'),
                 h('div.pt-spacer'),
                 accountChip()),
             h('div.menu-main',
