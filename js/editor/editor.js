@@ -9,6 +9,7 @@ import { runAutopilot } from '../core/autopilot.js';
 import { formatTime } from '../core/format.js';
 import { CELL, LAYER, MAP_Y, MOODS, DIRS } from '../core/constants.js';
 import { h, isTypingTarget, copyText, loadModuleCss } from '../game/dom.js';
+import { trackLink } from '../game/links.js';
 import { iconSvg, MOOD_LABELS } from '../game/icons.js';
 import { modalOpen } from '../game/ui.js';
 import { medalTargets } from '../levels/medals.js';
@@ -197,6 +198,7 @@ class EditorSession {
             B('Open', 'map', () => this.openDialog(), { title: 'Open a saved track, copy an official one, or paste a code' }),
             this.saveBtn,
             B('Share', 'export', () => this.share(), { title: 'Share code' }),
+            B('Copy link', 'link', () => this.copyLink(), { title: 'Copy a link that opens this track for a friend' }),
             h('div.ed-sep'),
             this.undoBtn, this.redoBtn,
             h('div.pt-spacer'),
@@ -1042,7 +1044,23 @@ class EditorSession {
                 ? `Friends can paste this into My Tracks → Import code to race "${doc.track.name}" (medals included).`
                 : `Friends can paste this into My Tracks → Import code. Validate first if you want medals in it.`,
             copy: async (c) => app.toast(await copyText(c) ? 'Share code copied' : 'Copy failed: select the text and copy it', { icon: 'copy' }),
+            link: trackLink(code),
+            copyLink: async (l) => app.toast(await copyText(l) ? 'Track link copied' : 'Copy failed: select the text and copy it', { icon: 'link' }),
         });
+    }
+
+    /** One click: the track being built, as a link that imports it for a friend. */
+    async copyLink() {
+        const app = this.app;
+        let code;
+        try {
+            code = encodeTrack(this.doc.toTrack());
+        } catch (e) {
+            app.toast(`Can't make a link: ${e.message}`, { kind: 'bad' });
+            return;
+        }
+        const ok = await copyText(trackLink(code));
+        app.toast(ok ? (this.doc.validated ? 'Track link copied' : 'Track link copied (validate it first if you want medals in it)') : 'Copy failed: use Share instead', { icon: 'link', kind: ok ? undefined : 'bad' });
     }
 
     async openDialog() {

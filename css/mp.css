@@ -211,3 +211,5 @@
 
 /* The debug autopilot tag sits in the same corner. */
 .play-autopilot ~ .mp-play-chip { bottom: 50px; }
+.mp-code-row { gap: 8px; align-items: center; flex-wrap: wrap; }
+.mp-invite { margin-top: 4px; }

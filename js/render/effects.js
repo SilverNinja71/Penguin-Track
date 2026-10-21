@@ -16,6 +16,25 @@ const SPRAY_TINTS = { powder: [1, 0.96, 0.9], ground: [0.95, 0.97, 1], other: [0
 const GLINT = [0.85, 0.95, 1], BOOST_FROST = [0.4, 0.9, 1], BOOST_AVALANCHE = [1, 0.3, 0.6];
 const SKID_COLORS = { snow: [0.55, 0.64, 0.78, 0.55], powder: [0.74, 0.62, 0.46, 0.5], ground: [0.66, 0.74, 0.86, 0.5], ice: [1, 1, 1, 0.55] };
 const CONFETTI = [0x7fdcff, 0xff5d8f, 0xffd54a, 0x6bffb0, 0xffffff, 0xb08cff];
+// Speed lines: thin wind streaks rushing past the lens once the focus car goes fast.
+const STREAKS = 56;
+const STREAK_KMH = 115;      // they start to show above this speed...
+const STREAK_FULL_KMH = 185; // ...and are fully there at this one
+
+const STREAK_VERT = /* glsl */`
+attribute float alpha;
+varying float vAlpha;
+void main() {
+    vAlpha = alpha;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const STREAK_FRAG = /* glsl */`
+uniform vec3 uColor;
+varying float vAlpha;
+void main() {
+    gl_FragColor = vec4(uColor, vAlpha);
+}`;
 
 function setEdge(edge, a, b) {
     for (let k = 0; k < 3; k++) { edge.a[k] = a[k]; edge.b[k] = b[k]; }
@@ -306,6 +325,26 @@ export class Effects {
         this.snow.frustumCulled = false;
         this.snow.renderOrder = 8;
         this.group.add(this.snow);
+
+        // Speed lines, in camera space: each streak has an angle and radius around the view axis
+        // and a depth that rushes towards the lens. Positions are rewritten in place each frame.
+        const sp = new Float32Array(STREAKS * 6), sa = new Float32Array(STREAKS * 2);
+        const sg = new THREE.BufferGeometry();
+        sg.setAttribute('position', new THREE.BufferAttribute(sp, 3).setUsage(THREE.DynamicDrawUsage));
+        sg.setAttribute('alpha', new THREE.BufferAttribute(sa, 1).setUsage(THREE.DynamicDrawUsage));
+        this.streaks = new THREE.LineSegments(sg, new THREE.ShaderMaterial({
+            uniforms: { uColor: { value: new THREE.Color(0xeaf8ff) } },
+            vertexShader: STREAK_VERT, fragmentShader: STREAK_FRAG,
+            transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+        }));
+        this.streaks.frustumCulled = false;
+        this.streaks.renderOrder = 900;
+        this.streaks.visible = false;
+        this.streakState = new Float32Array(STREAKS * 3); // angle, radius, depth
+        this.streakRand = rngOf(0x5eed);
+        for (let i = 0; i < STREAKS; i++) this._respawnStreak(i, -2 - this.streakRand() * 38);
+        this.streakK = 0;
+        this.group.add(this.streaks);
 
         // Pulse rings (checkpoints, laps) and the respawn flash.
         this.rings = [];
@@ -603,6 +642,52 @@ export class Effects {
             if (r.car?.object) r.mesh.position.lerp(r.car.object.position, 0.5);
         }
         if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt);
+        this._updateStreaks(dt, focus);
+    }
+
+    _respawnStreak(i, depth) {
+        const s = this.streakState;
+        const r = this.streakRand;
+        s[i * 3] = r() * Math.PI * 2;
+        s[i * 3 + 1] = 3.5 + r() * 5;
+        s[i * 3 + 2] = depth;
+    }
+
+    /** Speed lines: fade in with the focus car's speed (and its boost), stream towards the lens. */
+    _updateStreaks(dt, focus) {
+        const v = focus?.view;
+        const kmh = v ? v.speedKmh || 0 : 0;
+        let target = Math.min(1, Math.max(0, (kmh - STREAK_KMH) / (STREAK_FULL_KMH - STREAK_KMH)));
+        if (v?.effects?.turbo && kmh > 60) target = Math.min(1, target + 0.45);
+        if (this.reducedMotion || !focus?.visible) target = 0;
+        this.streakK += (target - this.streakK) * Math.min(1, dt * 6);
+        const k = this.streakK;
+        this.streaks.visible = k > 0.02;
+        if (!this.streaks.visible || dt <= 0) return;
+        const s = this.streakState;
+        const pos = this.streaks.geometry.attributes.position, al = this.streaks.geometry.attributes.alpha;
+        const P = pos.array, A = al.array;
+        const rush = (kmh / 3.6) * 1.6 + 20;
+        const len = 2 + k * 5;
+        for (let i = 0; i < STREAKS; i++) {
+            let z = s[i * 3 + 2] + rush * dt;
+            if (z > -1) {
+                this._respawnStreak(i, -30 - this.streakRand() * 12);
+                z = s[i * 3 + 2];
+            }
+            s[i * 3 + 2] = z;
+            const a = s[i * 3], r = s[i * 3 + 1];
+            const x = Math.cos(a) * r, y = Math.sin(a) * r * 0.62;
+            const o = i * 6;
+            P[o] = x; P[o + 1] = y; P[o + 2] = z;
+            P[o + 3] = x; P[o + 4] = y; P[o + 5] = z - len;
+            // Brightest mid-way, fading in far ahead and out right at the lens
+            const fade = Math.min(1, (-z - 1) / 5) * Math.min(1, (z + 42) / 10);
+            A[i * 2] = 0.42 * k * fade;
+            A[i * 2 + 1] = 0;
+        }
+        pos.needsUpdate = true;
+        al.needsUpdate = true;
     }
 
     /** Spray, sparkle, skid ribbons and boost trail of one car. */
@@ -719,6 +804,11 @@ export class Effects {
         this.glow.uniforms.uScale.value = scale;
         this.snowUniforms.uScale.value = scale;
         this.snowUniforms.uCam.value.copy(camera.position);
+        if (this.streaks.visible) {
+            this.streaks.position.copy(camera.position);
+            this.streaks.quaternion.copy(camera.quaternion);
+            this.streaks.updateMatrixWorld();
+        }
         const f = this.flash;
         if (this.flashT > 0) {
             f.visible = true;
@@ -747,6 +837,8 @@ export class Effects {
         this.flags.length = 0;
         this.flash.geometry.dispose();
         this.flash.material.dispose();
+        this.streaks.geometry.dispose();
+        this.streaks.material.dispose();
         if (this.headlightCar) this.headlightCar.object.remove(this.spot, this.spotTarget);
         this.spot.dispose();
         this.group.clear();

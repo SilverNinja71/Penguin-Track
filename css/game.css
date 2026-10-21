@@ -196,6 +196,9 @@ a.pt-btn { text-decoration: none; }
 .menu-tag { margin: -4px 0 6px; color: var(--accent-2); font-weight: 600; font-size: clamp(15px, 1.6vw, 19px); text-shadow: 0 2px 6px rgba(0, 10, 30, 0.6); }
 .menu-nav { display: flex; flex-direction: column; gap: 12px; max-width: 540px; }
 .menu-play { width: 100%; max-width: 540px; font-size: 26px; padding: 16px 26px 13px; }
+.menu-play-row { display: flex; gap: 10px; }
+.menu-play-row .menu-play { flex: 1.5; min-width: 0; }
+.menu-friends { flex: 1; min-width: 0; font-size: 19px; padding: 12px 14px 9px; background: rgba(40, 120, 90, 0.85); }
 .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .menu-item { justify-content: flex-start; gap: 12px; padding: 10px 14px 8px; background: rgba(12, 30, 60, 0.72); text-align: left; }
 .menu-item .pt-ico { color: var(--accent); }
@@ -674,6 +677,7 @@ a.pt-btn { text-decoration: none; }
     .pt-screen { padding-top: 14px; padding-bottom: 14px; }
     .menu-main { gap: 8px; }
     .menu-play { font-size: 22px; padding: 12px 20px 10px; }
+    .menu-friends { font-size: 17px; padding: 10px 12px 8px; }
     .menu-item { padding: 7px 12px 5px; }
     .menu-item-hint { display: none; }
     .pt-logo-word { font-size: clamp(36px, 5.6vw, 70px); }
@@ -696,6 +700,7 @@ a.pt-btn { text-decoration: none; }
     .pt-logo-word { font-size: 40px; flex-direction: column; }
     .menu-nav { flex: 1; gap: 8px; }
     .menu-play { font-size: 20px; padding: 9px 16px 7px; }
+    .menu-friends { font-size: 15px; padding: 8px 10px 6px; }
     .menu-grid { grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
     .menu-item { flex-direction: column; gap: 2px; padding: 6px 4px 4px; text-align: center; justify-content: center; }
     .menu-item-label { font-size: 13px; }

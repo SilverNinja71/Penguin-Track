@@ -63,6 +63,9 @@ const menu = {
         const play = h('button.pt-btn.primary.big.menu-play', {
             type: 'button', 'data-autofocus': true, onclick: () => app.goto('campaign'),
         }, h('span.pt-ico', { html: iconSvg('play', 26) }), 'Play');
+        const friends = h('button.pt-btn.big.menu-friends', {
+            type: 'button', title: 'Open an online room and send friends a link', onclick: () => app.goto('mp', { view: 'online' }),
+        }, h('span.pt-ico', { html: iconSvg('users', 24) }), 'Race Friends');
         const grid = h('div.menu-grid', ITEMS.map((it) => h('button.pt-btn.menu-item', {
             type: 'button', onclick: () => app.goto(it.id), title: it.hint,
         }, icon(it.icon, 22), h('span.menu-item-text', h('span.menu-item-label', it.label), h('span.menu-item-hint', it.hint)))));
@@ -76,7 +79,7 @@ const menu = {
             h('div.menu-main',
                 logo(),
                 h('p.menu-tag', 'Snowy time attack. Chase the Emperor medal.'),
-                h('nav.menu-nav', { 'aria-label': 'Main menu' }, play, grid)),
+                h('nav.menu-nav', { 'aria-label': 'Main menu' }, h('div.menu-play-row', play, friends), grid)),
             h('div.menu-foot',
                 h('div.menu-keys.pt-muted', h('span.pt-kbd', '↑↓←→'), ' move  ', h('span.pt-kbd', 'Enter'), ' select  ', h('span.pt-kbd', 'Esc'), ' back'),
                 h('div.pt-spacer'),

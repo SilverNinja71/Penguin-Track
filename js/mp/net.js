@@ -111,14 +111,15 @@ function openPeer(Peer, id) {
 }
 
 /**
- * Opens a host peer on a fresh room code (retrying taken codes).
+ * Opens a host peer on a fresh room code (retrying taken codes), or on exactly
+ * `want` when given (no retry: a taken code is an error).
  * Returns { peer, code, onConnection(fn), destroy() }.
  */
-export async function hostPeer() {
+export async function hostPeer(want = null) {
     const Peer = await loadPeerJS();
     let lastErr = null;
-    for (let i = 0; i < 4; i++) {
-        const code = makeRoomCode();
+    for (let i = 0; i < (want ? 1 : 4); i++) {
+        const code = want || makeRoomCode();
         try {
             const peer = await openPeer(Peer, peerIdFor(code));
             const handlers = [];

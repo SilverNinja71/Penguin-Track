@@ -136,7 +136,7 @@ export function promptDialog(title, opts = {}) {
 }
 
 /** Shows a read-only code with a Copy button (share codes, replay codes). */
-export function showCodeDialog(title, code, { message = '', copy } = {}) {
+export function showCodeDialog(title, code, { message = '', copy, link = null, copyLink = null } = {}) {
     return openModal((close) => {
         const ta = h('textarea.pt-input.pt-code', { rows: 4, readonly: true, spellcheck: 'false' });
         ta.value = code;
@@ -147,13 +147,21 @@ export function showCodeDialog(title, code, { message = '', copy } = {}) {
             ta,
             h('div.pt-row.pt-modal-actions',
                 h('button.pt-btn', { type: 'button', onclick: () => close(null) }, 'Close'),
-                h('button.pt-btn.primary', {
-                    type: 'button', 'data-autofocus': true,
+                h('button.pt-btn', {
+                    type: 'button', 'data-autofocus': !link,
+                    class: link ? '' : 'primary',
                     onclick: async () => {
                         if (copy) await copy(code);
                         close(true);
                     },
-                }, h('span.pt-ico', { html: iconSvg('copy', 18) }), 'Copy')));
+                }, h('span.pt-ico', { html: iconSvg('copy', 18) }), link ? 'Copy code' : 'Copy'),
+                link ? h('button.pt-btn.primary', {
+                    type: 'button', 'data-autofocus': true,
+                    onclick: async () => {
+                        if (copyLink) await copyLink(link);
+                        close(true);
+                    },
+                }, h('span.pt-ico', { html: iconSvg('link', 18) }), 'Copy link') : null));
     }, { label: title });
 }
 

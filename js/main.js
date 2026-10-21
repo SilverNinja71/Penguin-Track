@@ -7,6 +7,7 @@ import { Controls } from './game/controls.js';
 import { Loop } from './game/loop.js';
 import { makeToaster, openModal, confirmDialog, promptDialog, showCodeDialog, modalOpen, topModal, moveFocus, focusablesIn } from './game/ui.js';
 import { makeCatalog } from './game/catalog.js';
+import { readLaunchLink } from './game/links.js';
 import * as levels from './levels/index.js';
 import { NullRenderer, NullAudio, hardenRenderer, hardenAudio } from './game/stubs.js';
 import { Backdrop } from './game/backdrop.js';
@@ -141,6 +142,10 @@ class App {
 
     _start() {
         const q = this.query;
+        // Invite links drop straight into the online room; track links into My Tracks.
+        const link = readLaunchLink(q);
+        if (link && link.room) return this.goto('mp', { view: 'online', room: link.room, host: link.host });
+        if (link && link.track) return this.goto('mytracks', { importCode: link.track });
         const playId = q.get('play');
         const screen = q.get('screen');
         if (playId) return this.goto('play', { track: playId, mode: q.get('mode') || undefined });

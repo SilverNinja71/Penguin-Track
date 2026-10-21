@@ -7,6 +7,7 @@ import { h, niceDate, copyText } from './dom.js';
 import { icon, iconSvg, MOOD_LABELS } from './icons.js';
 import { allRecords } from './records.js';
 import { showCodeDialog } from './ui.js';
+import { trackLink } from './links.js';
 
 function newTrackId() {
     return 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
@@ -31,6 +32,8 @@ const mytracks = {
             h('div.list-wrap.pt-panel', this.listEl));
         app.ui.appendChild(this.el);
         this.render(params.select);
+        // Opened from a track link (#track=PT1.…)
+        if (params.importCode) this.importText(params.importCode);
     },
 
     tracks() {
@@ -84,6 +87,7 @@ const mytracks = {
             h('div.list-row-actions',
                 B('Play', 'play', () => this.play(t), 'primary'),
                 B('Edit', 'edit', () => app.goto('editor', { track: t })),
+                B('Copy link', 'link', () => this.copyLink(t)),
                 B('Share code', 'copy', () => this.share(t)),
                 B('Delete', 'trash', () => this.remove(t), 'danger')));
     },
@@ -106,9 +110,24 @@ const mytracks = {
             return;
         }
         showCodeDialog('Share code', code, {
-            message: `Anyone can paste this into My Tracks → Import code to race "${t.name}".`,
+            message: `Send the link: opening it adds "${t.name}" to your friend's My Tracks. The code works too, through My Tracks → Import code.`,
             copy: async (c) => this.app.toast(await copyText(c) ? 'Share code copied' : 'Copy failed: select the text and copy it', { icon: 'copy' }),
+            link: trackLink(code),
+            copyLink: async (l) => this.app.toast(await copyText(l) ? 'Track link copied' : 'Copy failed: select the text and copy it', { icon: 'link' }),
         });
+    },
+
+    /** One click: the whole track as a link on the clipboard. */
+    async copyLink(t) {
+        let code;
+        try {
+            code = encodeTrack(t);
+        } catch (e) {
+            this.app.toast(`Can't make a link: ${e.message}`, { kind: 'bad' });
+            return;
+        }
+        const ok = await copyText(trackLink(code));
+        this.app.toast(ok ? `Link to "${t.name}" copied: paste it to a friend` : 'Copy failed: use Share code instead', { icon: 'link', kind: ok ? undefined : 'bad' });
     },
 
     async remove(t) {
@@ -124,8 +143,16 @@ const mytracks = {
 
     async importCode() {
         const app = this.app;
-        const text = await app.prompt('Import a track', { message: 'Paste a share code (it starts with PT1.).', multiline: true, placeholder: 'PT1.…', ok: 'Import' });
+        const text = await app.prompt('Import a track', { message: 'Paste a share code (it starts with PT1.) or a track link.', multiline: true, placeholder: 'PT1.…', ok: 'Import' });
         if (!text) return;
+        this.importText(text);
+    },
+
+    /** Imports a share code (or a track link holding one) into My Tracks. */
+    importText(text) {
+        const app = this.app;
+        const inLink = /#track=(PT1\.[A-Za-z0-9_-]+)/.exec(text);
+        if (inLink) text = inLink[1];
         let track;
         try {
             track = decodeTrack(text.trim());
