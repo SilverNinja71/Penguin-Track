@@ -213,3 +213,21 @@
 .play-autopilot ~ .mp-play-chip { bottom: 50px; }
 .mp-code-row { gap: 8px; align-items: center; flex-wrap: wrap; }
 .mp-invite { margin-top: 4px; }
+
+/* end of round: podium (2-1-3) and the next-track vote */
+.mp-podium { display: flex; align-items: flex-end; justify-content: center; gap: 8px; margin: 6px 0 12px; }
+.mp-pod { display: flex; flex-direction: column; align-items: center; gap: 2px; width: min(150px, 30%); }
+.mp-pod-name { font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-pod-time { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.mp-pod-step { width: 100%; display: grid; place-items: center; font-size: 28px; font-weight: 900; border-radius: 10px 10px 4px 4px; color: #0b1a33; }
+.mp-pod.p1 .mp-pod-step { height: 86px; background: linear-gradient(#ffe68a, #f2b62b); }
+.mp-pod.p2 .mp-pod-step { height: 62px; background: linear-gradient(#f1f6fb, #b9c6d6); }
+.mp-pod.p3 .mp-pod-step { height: 44px; background: linear-gradient(#f3c79d, #c4834d); }
+.mp-pod.me .mp-pod-name { color: var(--accent); }
+.mp-vote { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.mp-vote:empty { display: none; }
+.mp-vote-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
+.mp-vote-btn { justify-content: space-between; gap: 8px; text-align: left; font-size: 14px; min-width: 0; padding-left: 10px; padding-right: 8px; }
+.mp-vote-name { min-width: 0; white-space: normal; line-height: 1.15; }
+.mp-vote-btn.on { outline: 3px solid var(--accent); background: rgba(127, 220, 255, 0.18); }
+.mp-vote-n { min-width: 26px; text-align: center; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); }

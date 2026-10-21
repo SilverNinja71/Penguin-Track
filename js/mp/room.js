@@ -6,7 +6,7 @@
 // round clock. A connection is { id, send(text), onData(fn), onClose(fn), close() }.
 import {
     PROTOCOL_VERSION, MAX_PLAYERS, LIMITS, encode, decode, validateClientMsg, validateHostMsg,
-    cleanName, uniqueName, cleanText, packPose,
+    cleanName, uniqueName, cleanText, packPose, BALLOT_MAX,
 } from './protocol.js';
 import { rankRuns, isBetter } from './scoring.js';
 import { formatTime } from '../core/format.js';
@@ -77,6 +77,7 @@ export class RoomHost {
         this.players = [];             // joined states, in join order
         this.chat = [];
         this.round = { n: 0, state: 'lobby', track: null, durationMs: 0, endAt: 0 };
+        this.ballot = null;            // [{ id, name }] while a next-track vote is open
         this.nextId = 1;
         this.closed = false;
     }
@@ -135,6 +136,11 @@ export class RoomHost {
                 if (p && p.replay) this._send(st, { t: 'replay', id: p.id, replay: p.replay });
                 return;
             }
+            case 'vote':
+                if (!this.ballot || (m.id !== '' && !this.ballot.some((c) => c.id === m.id))) return;
+                st.vote = m.id || null;
+                this._broadcast(this._ballotMsg());
+                return;
             case 'ping': return this._send(st, { t: 'pong', c: m.c });
             case 'bye': return this._drop(st, 'left');
             default:
@@ -159,6 +165,7 @@ export class RoomHost {
         st.name = uniqueName(cleanName(m.name), this.players.map((p) => p.name));
         this.players.push(st);
         this._send(st, { t: 'welcome', v: PROTOCOL_VERSION, you: st.id, name: st.name });
+        if (this.ballot) this._send(st, this._ballotMsg());
         this._send(st, this._roundMsg());
         for (const c of this.chat.slice(-12)) this._send(st, c);
         this._sys(`${st.name} slid into the room.`);
@@ -246,6 +253,7 @@ export class RoomHost {
     startRound(trackRef, durationMs) {
         const d = Math.max(LIMITS.roundMs[0], Math.min(LIMITS.roundMs[1], Math.round(durationMs)));
         this.round = { n: this.round.n + 1, state: 'racing', track: trackRef, durationMs: d, endAt: this.now() + d };
+        if (this.ballot) this.closeBallot();
         for (const p of this.players) {
             p.best = null;
             p.respawns = 0;
@@ -271,6 +279,32 @@ export class RoomHost {
         this._sys(win ? `Round over! ${win.player.name} takes it with ${fmt(win.run.timeMs)}.` : 'Round over! Nobody reached the finish.');
         this._players();
         return ranked;
+    }
+
+    /** Opens a next-track vote between official tracks [{ id, name }]; everyone's old vote is cleared. */
+    openBallot(choices) {
+        this.ballot = choices.slice(0, BALLOT_MAX).map((c) => ({ id: c.id, name: c.name || c.id }));
+        for (const p of this.players) p.vote = null;
+        this._broadcast(this._ballotMsg());
+    }
+
+    closeBallot() {
+        this.ballot = null;
+        this._broadcast(this._ballotMsg());
+    }
+
+    /** The choice with the most votes (the first listed wins a tie), or null with no vote open. */
+    ballotWinner() {
+        if (!this.ballot || !this.ballot.length) return null;
+        const tally = this._ballotMsg().tally;
+        let best = 0;
+        for (let i = 1; i < tally.length; i++) if (tally[i] > tally[best]) best = i;
+        return this.ballot[best];
+    }
+
+    _ballotMsg() {
+        const choices = this.ballot || [];
+        return { t: 'ballot', choices, tally: choices.map((c) => this.players.filter((p) => p.vote === c.id).length) };
     }
 
     toLobby() {
@@ -388,6 +422,8 @@ export class RoomClient {
         this.players = [];
         this.chat = [];
         this.round = { n: 0, state: 'lobby', track: null, durationMs: 0, leftMs: 0, endAt: 0 };
+        this.ballot = null;         // { choices, tally } while the host runs a next-track vote
+        this.vote = null;           // the id we voted for
         this.remotes = new Map();   // id -> PoseBuffer
         this.closed = false;
         this.rejected = null;
@@ -435,6 +471,10 @@ export class RoomClient {
                 break;
             case 'pong':
                 this.rtt = Math.max(0, this.now() - m.c);
+                break;
+            case 'ballot':
+                this.ballot = m.choices.length ? m : null;
+                if (!this.ballot || !m.choices.some((c) => c.id === this.vote)) this.vote = null;
                 break;
             default:
         }
@@ -487,6 +527,12 @@ export class RoomClient {
         if (this.round.state !== 'racing') return false;
         this._send({ t: 'fin', round: this.round.n, timeMs: replay.timeMs, respawns, replay: slimReplay(replay) });
         return true;
+    }
+
+    /** Votes for a ballot choice (or '' to take the vote back). */
+    sendVote(id) {
+        this.vote = id || null;
+        this._send({ t: 'vote', id: id || '' });
     }
 
     requestReplay(id) {

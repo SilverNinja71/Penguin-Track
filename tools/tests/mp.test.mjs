@@ -296,6 +296,38 @@ test('room: join, welcome, unique names, chat relay, leave', async () => {
     assert.ok(a.chat.some((c) => c.sys && /left/.test(c.text)));
 });
 
+test('room: next-track vote: tallies, late joiners, bad votes ignored, winner, closes on a new round', async () => {
+    const room = makeRoom();
+    const a = room.join('Host');
+    const b = room.join('Bea');
+    await flush();
+    room.host.openBallot([{ id: 'A02', name: 'Two' }, { id: 'A03', name: 'Three' }]);
+    await flush();
+    assert.deepEqual(b.ballot.choices.map((c) => c.id), ['A02', 'A03']);
+    assert.deepEqual(b.ballot.tally, [0, 0]);
+    a.sendVote('A03');
+    b.sendVote('A03');
+    b.sendVote('Z99');   // not on the ballot: ignored, Bea's vote stays
+    await flush();
+    assert.deepEqual(a.ballot.tally, [0, 2]);
+    assert.equal(room.host.ballotWinner().id, 'A03');
+    const c = room.join('Cat');   // joins mid-vote and gets the ballot with the welcome
+    await flush();
+    assert.deepEqual(c.ballot.tally, [0, 2]);
+    b.sendVote('');   // takes the vote back
+    c.sendVote('A02');
+    await flush();
+    assert.deepEqual(a.ballot.tally, [1, 1]);
+    assert.equal(room.host.ballotWinner().id, 'A02', 'a tie goes to the first choice');
+    assert.equal(validateClientMsg({ t: 'vote', id: '<b>' }), null);
+    assert.equal(validateHostMsg({ t: 'ballot', choices: [{ id: 'A01' }], tally: [1, 2] }), null, 'tally must match the choices');
+    room.host.startRound({ id: 'A02', name: 'Two' }, 60000);
+    await flush();
+    assert.equal(room.host.ballot, null);
+    assert.equal(b.ballot, null);
+    assert.equal(b.vote, null);
+});
+
 test('room: full rooms and other protocol versions are refused', async () => {
     const room = makeRoom();
     room.host.maxPlayers = 2;

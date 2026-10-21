@@ -334,9 +334,20 @@ export function createOnlineView(app, nav) {
             if (!code) busy(false, `That invite link's room code (${l.code}) doesn't read. Ask for a fresh link.`);
             else if (l.host) start((s) => s.create(code), `Opening room ${code}…`);
             else {
+                // The host may still be opening the room (a party arrives together): keep knocking for a while.
                 ui.code = code;
                 codeIn.value = code;
-                join();
+                start(async (s) => {
+                    for (let i = 0; ; i++) {
+                        try {
+                            return await s.join(code);
+                        } catch (e) {
+                            if (i >= 5 || !/No room/i.test(e.message || '')) throw e;
+                            busy(true, `Waiting for room ${code} to open…`);
+                            await new Promise((r) => setTimeout(r, 2500));
+                        }
+                    }
+                }, `Knocking on room ${code}…`);
             }
         }
     };
@@ -550,6 +561,21 @@ function trackRefFor(app, s, pasted, id) {
     return { code, hash, name: track.name || 'Custom track' };
 }
 
+/** Up to three official tracks for the next-track vote: the next two after this one, then random picks. */
+function ballotChoices(app, ref) {
+    const ids = app.catalog.campaignIds();
+    const cur = ref && ref.id && ids.includes(ref.id) ? ref.id : null;
+    const out = [];
+    const add = (id) => { if (id && id !== cur && !out.includes(id) && ids.includes(id)) out.push(id); };
+    if (cur) {
+        const n1 = app.catalog.nextTrackId(cur);
+        add(n1);
+        if (n1) add(app.catalog.nextTrackId(n1));
+    }
+    for (let guard = 0; out.length < 3 && guard < 60; guard++) add(ids[Math.floor(Math.random() * ids.length)]);
+    return out.map((id) => ({ id, name: (app.catalog.info(id) || {}).name || id }));
+}
+
 function rankedPlayers(c) {
     return c.players.slice().sort((a, b) => (a.best == null) - (b.best == null) || (a.best ?? 0) - (b.best ?? 0) || b.pts - a.pts);
 }
@@ -640,6 +666,8 @@ class OnlineRace {
             const r = this.c.round;
             if (r.state === 'ended' || r.state === 'lobby') this.showEnded();
             this.drawBoard();
+        } else if (type === 'ballot') {
+            this._drawVote();
         }
     }
 
@@ -869,11 +897,17 @@ class OnlineRace {
         const isHost = !!this.s.host;
         const r = this.c.round;
         this.endBody = h('tbody');
+        this.podiumEl = h('div.mp-podium-wrap');
+        this.voteEl = h('div.mp-vote');
         this._endTable();
+        // the host opens a next-track vote as soon as the round is over
+        if (isHost && r.state === 'ended' && !this.s.host.ballot) this.s.host.openBallot(ballotChoices(this.app, r.track));
         this.endEl.replaceChildren(h('div.pt-panel.mp-end-panel', { role: 'dialog', 'aria-label': 'Round over' },
             h('div.mp-kicker', `Round ${r.n} over`),
             h('h2.mp-turn-track', this.track.name),
+            this.podiumEl,
             h('table.mp-table.big', this.endBody),
+            this.voteEl,
             h('div.pt-row.mp-actions',
                 isHost ? h('button.pt-btn.primary', { type: 'button', 'data-autofocus': true, onclick: () => this.s.host.startRound(r.track, r.durationMs) }, ico('retry', 20), 'Another round here') : h('span.pt-muted', 'Waiting for the host…'),
                 h('button.pt-btn', { type: 'button', 'data-autofocus': isHost ? null : true, onclick: () => this.toLobby() }, ico('users', 20), isHost ? 'Lobby: change track' : 'Lobby and chat'))));
@@ -882,7 +916,62 @@ class OnlineRace {
         if (f) requestAnimationFrame(() => f.isConnected && f.focus({ preventScroll: true }));
     }
 
+    /** Next-track vote: everyone taps a track; the host starts the winner. */
+    _drawVote() {
+        const el = this.voteEl, c = this.c, b = c.ballot;
+        if (!el) return;
+        if (!b) {
+            el.replaceChildren();
+            return;
+        }
+        el.replaceChildren(
+            h('div.mp-kicker', 'Vote for the next track'),
+            h('div.mp-vote-row', b.choices.map((ch, i) => h('button.pt-btn.mp-vote-btn', {
+                type: 'button', class: c.vote === ch.id ? 'on' : '', 'aria-pressed': c.vote === ch.id ? 'true' : 'false',
+                onclick: () => { c.sendVote(c.vote === ch.id ? '' : ch.id); this._drawVote(); },
+            }, h('span.mp-vote-name', h('span.pt-mono', ch.id), ' ', ch.name), h('b.mp-vote-n.pt-mono', String(b.tally[i]))))),
+            this.s.host
+                ? h('button.pt-btn.primary', { type: 'button', onclick: () => this._playVoted() }, ico('flag', 20), 'Play the winner')
+                : h('p.pt-muted.mp-small', 'The host starts the most-voted track.'));
+    }
+
+    _playVoted() {
+        const w = this.s.host && this.s.host.ballotWinner();
+        if (!w) return;
+        let ref;
+        try {
+            ref = trackRefFor(this.app, this.s, null, w.id);
+        } catch (e) {
+            this.app.toast(e.message, { kind: 'bad' });
+            return;
+        }
+        this.s.host.startRound(ref, this.c.round.durationMs || 180000);
+    }
+
+    /** Top three on blocks of 2-1-3 with their time and the medal it would earn. */
+    _drawPodium() {
+        if (!this.podiumEl) return;
+        const top = rankedPlayers(this.c).filter((p) => p.best != null).slice(0, 3);
+        if (!top.length) {
+            this.podiumEl.replaceChildren(h('p.pt-muted', 'Nobody reached the finish this round.'));
+            return;
+        }
+        this.podiumEl.replaceChildren(h('div.mp-podium', [1, 0, 2].filter((i) => top[i]).map((i) => {
+            const p = top[i];
+            let medal = null;
+            try {
+                medal = this.track.medals ? this.app.catalog.medalFor(this.track, { timeMs: p.best, respawns: p.respawns }) : null;
+            } catch (e) { /* no medal */ }
+            return h('div.mp-pod', { class: `p${i + 1}${p.id === this.c.you ? ' me' : ''}` },
+                h('div.mp-pod-name', p.name),
+                h('div.mp-pod-time.pt-mono', formatTime(p.best), medal ? h('span.pt-medal', { class: medal, title: this.app.catalog.medalLabel(medal) }) : null),
+                h('div.mp-pod-step', String(i + 1)));
+        })));
+    }
+
     _endTable() {
+        this._drawPodium();
+        this._drawVote();
         const c = this.c;
         const rows = rankedPlayers(c);
         let place = 0;

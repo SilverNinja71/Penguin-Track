@@ -23,6 +23,7 @@ export const LIMITS = {
 
 const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 const TRACK_ID_RE = /^[A-Za-z0-9_.-]{1,40}$/;
+export const BALLOT_MAX = 4;
 const HASH_RE = /^[0-9a-f]{8,32}$/;
 
 // ------------------------------------------------------------------ helpers
@@ -196,6 +197,9 @@ export function validateClientMsg(m) {
         }
         case 'want':
             return isStr(m.id, LIMITS.id) && ID_RE.test(m.id) ? { t: 'want', id: m.id } : null;
+        case 'vote':
+            // a track id from the host's ballot ('' takes the vote back)
+            return m.id === '' || (isStr(m.id, 40) && TRACK_ID_RE.test(m.id)) ? { t: 'vote', id: m.id } : null;
         case 'ping':
             return isNum(m.c, 0, 1e13) ? { t: 'ping', c: m.c } : null;
         case 'bye':
@@ -232,6 +236,17 @@ export function validateHostMsg(m) {
             return { t: 'welcome', v: m.v, you: m.you, name: cleanName(m.name) };
         case 'reject':
             return { t: 'reject', reason: cleanText(m.reason, 120) || 'The room said no.' };
+        case 'ballot': {
+            // next-track vote: up to 4 official tracks and how many votes each has (empty = no vote open)
+            if (!Array.isArray(m.choices) || !Array.isArray(m.tally) || m.choices.length > BALLOT_MAX || m.tally.length !== m.choices.length) return null;
+            const choices = [];
+            for (const c of m.choices) {
+                if (!c || typeof c !== 'object' || !isStr(c.id, 40) || !TRACK_ID_RE.test(c.id)) return null;
+                choices.push({ id: c.id, name: cleanText(c.name, 40) || c.id });
+            }
+            for (const n of m.tally) if (!isInt(n, 0, MAX_PLAYERS)) return null;
+            return { t: 'ballot', choices, tally: m.tally.slice() };
+        }
         case 'players': {
             if (!Array.isArray(m.list) || m.list.length > MAX_PLAYERS) return null;
             const list = [];
