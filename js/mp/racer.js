@@ -3,7 +3,23 @@
 // fall, and the finish result. DOM-free, so it is Node-tested; the shared
 // countdown lives in Countdown below.
 import { Sim } from '../core/sim.js';
-import { Recorder, snapshotCar } from '../core/replay.js';
+import { Recorder, snapshotCar, verifyReplay } from '../core/replay.js';
+import { PHYSICS_LATEST, PHYSICS_LEGACY } from '../core/car.js';
+
+/**
+ * The handling every room races with. Finish replays travel without a physics
+ * field (the protocol strips unknown keys), so hosts verify with this version
+ * and fall back to physics 1 for guests on an older build.
+ */
+export const ROOM_PHYSICS = PHYSICS_LATEST;
+
+/** verifyReplay for a room finish: ROOM_PHYSICS, else a physics 1 run from a guest on an older build. */
+export function verifyRoomReplay(world, replay) {
+    const res = verifyReplay(world, replay, { physics: ROOM_PHYSICS });
+    if (res.ok || ROOM_PHYSICS === PHYSICS_LEGACY) return res;
+    const old = verifyReplay(world, replay, { physics: PHYSICS_LEGACY });
+    return old.ok ? old : res;
+}
 
 export const COUNT_STEP = 50;              // 3, 2, 1, GO every 0.5 s, like the play screen
 export const COUNT_TICKS = COUNT_STEP * 3;
@@ -12,7 +28,7 @@ export class Racer {
     constructor(world, { name = '' } = {}) {
         this.world = world;
         this.name = name;
-        this.sim = new Sim(world);
+        this.sim = new Sim(world, { physics: ROOM_PHYSICS });
         this.recorder = new Recorder();
         this.prev = snapshotCar(this.sim.car);
         this.cur = snapshotCar(this.sim.car);

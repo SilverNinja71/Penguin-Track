@@ -10,6 +10,14 @@ export const GRAVITY = 20;          // m/s², ~2 g: short, snappy jumps
 export const MAX_SPEED = 1000 / 3.6;
 const KMH = 3.6;
 
+// Physics versions. Every run is simulated with the rules it was recorded with:
+// replays, savestates and sims without a version are physics 1 (all runs before
+// the Trackmania-style handling), live play records PHYSICS_LATEST. Physics 1 is
+// frozen: its code paths below must stay bit-identical.
+export const PHYSICS_LEGACY = 1;
+export const PHYSICS_LATEST = 2;
+export const PHYSICS_VERSIONS = [1, 2];
+
 // Geometry and suspension (car-local: forward +Z, up +Y, right -X; origin = centre of mass).
 export const CAR = {
     length: 4.2,
@@ -54,6 +62,19 @@ export const CAR = {
     tyreHalfWidth: 0.15,        // a wheel still stands on a deck edge until its inner half is past it
     realignMinSpeed: 5,         // m/s: the realignment yaw is bounded below this speed...
     realignFadeSpeed: 3,        // ...and fades out toward a standstill
+    // Physics 2 only (Trackmania-style handling).
+    drift2MinSpeed: 40 / KMH,   // brake-tap drifts start from 40 km/h
+    drift2GripStart: 0.7,       // lateral grip factor right after the tap: the tail breaks loose...
+    drift2GripEnd: 1.1,         // ...and comes back past grip driving (a held drift turns tighter)
+    drift2GripRecover: 0.5,     // ...over this many drift seconds
+    drift2Counter: 2,           // counter-steer runs the drift clock up to (1 + this) times faster
+    speedDriftMin: 16 * DEG,    // a drift angle held inside this band...
+    speedDriftMax: 24 * DEG,
+    speedDriftMinSpeed: 110 / KMH,   // ...above this speed is a speed drift:
+    speedDriftAccel: 1.5,       // no scrub, and this push (m/s²) along the velocity
+    airBrakeLevel: 6,           // air-brake: pitch/roll rate (rad/s) per radian of tilt from the ground...
+    airBrakeResp: 12,           // ...reached this fast (1/s)
+    airBrakeRay: 40,            // m: how far below the car the ground plane is looked up (else level)
 };
 
 // Engine: forward acceleration (m/s²) versus forward speed (m/s), linearly interpolated.
@@ -146,7 +167,9 @@ function makeWheel() {
 const EMIT_NONE = () => {};
 
 export class Car {
-    constructor() {
+    constructor(physics = PHYSICS_LEGACY) {
+        // Rule set (fixed for the car's life; the Sim's physics version, not part of the state).
+        this.physics = physics;
         // Physics state (everything getState captures).
         this.pos = [0, 0, 0];
         this.vel = [0, 0, 0];
@@ -175,6 +198,8 @@ export class Car {
         this.surfaceUnder = null;
         this.wheels = [makeWheel(), makeWheel(), makeWheel(), makeWheel()];
         this.slipAngle = 0;
+        this.speedDrift = false;        // physics 2: drift angle in the speed-drift band at speed
+        this.airBraking = false;        // physics 2: brake held in the air (levelling)
 
         // Scratch (allocation-free stepping).
         this._fwd = [0, 0, 1]; this._up = [0, 1, 0];
@@ -217,6 +242,7 @@ export class Car {
         this.wallTicks = 0;
         this.bodyTicks = 0;
         this.gasHeld = false;
+        this.airBraking = false;
         this._groundSurf = -1;
         this._slip = 0;
         for (let i = 0; i < 4; i++) { this._wc[i] = false; this._ws[i] = 0; }
@@ -324,7 +350,16 @@ export class Car {
         }
         this.airTicks = groundedAny ? 0 : this.airTicks + 1;
         this.bodyTicks = this._bodyTouch ? (this.bodyTicks < 1000 ? this.bodyTicks + 1 : 1000) : 0;
-        if (this.drifting) this.driftTime += dt;
+        if (this.drifting) {
+            if (this.physics >= 2) {
+                // The drift clock drives the grip recovery; counter-steer runs it faster.
+                const counter = -this.steer * this.driftDir;
+                this.driftTime += counter > 0 ? dt * (1 + CAR.drift2Counter * counter) : dt;
+            } else {
+                this.driftTime += dt;
+            }
+        }
+        this.airBraking = this.physics >= 2 && brake && !groundedAny && this.bodyTicks === 0;
 
         if (this._landing > 0) {
             emit('land', { strength: this._landing, airTime: wasAir * TICK });
@@ -480,8 +515,10 @@ export class Car {
             // powder or deep snow. Holding the brake into a corner is plain trail braking.
             const steer = this.steer;
             const canDrift = driftOk * 2 > wsum;
+            const v2 = this.physics >= 2;
+            const driftMin = v2 ? CAR.drift2MinSpeed : CAR.driftMinSpeed;
             if (!this.drifting) {
-                if (brake && this.brakeTicks <= CAR.driftTapTicks && canDrift && vf > CAR.driftMinSpeed
+                if (brake && this.brakeTicks <= CAR.driftTapTicks && canDrift && vf > driftMin
                     && (steer > 0.35 || steer < -0.35) && !e.cruise) {
                     this.drifting = true;
                     this.driftDir = steer > 0 ? 1 : -1;
@@ -490,9 +527,10 @@ export class Car {
             } else {
                 const vl = vel[0] * R[0] + vel[1] * R[1] + vel[2] * R[2];
                 const slip = -datan2(vl, vf > 0.1 ? vf : 0.1) * this.driftDir;   // > 0 = nose inside the turn
-                const steering = steer * this.driftDir > 0.15;
+                // Physics 2: counter-steer holds the drift too (it catches the slide until it settles).
+                const steering = v2 ? steer > 0.15 || steer < -0.15 : steer * this.driftDir > 0.15;
                 const settled = this.driftTime > 0.3 && slip < 3 * DEG;
-                if ((!brake && !steering) || settled || vf < 0.7 * CAR.driftMinSpeed || !canDrift) {
+                if ((!brake && !steering) || settled || vf < 0.7 * driftMin || !canDrift) {
                     this.drifting = false;
                     this.driftDir = 0;
                 }
@@ -539,12 +577,19 @@ export class Car {
                 vel[2] = (vel[2] - N[2] * vn) * k + N[2] * vn;
             }
             // Touchdown after a flight.
-            if (wasAir >= LAND_MIN_AIR && this.airTicks > 0) this._touchdown(N, H);
+            if (wasAir >= LAND_MIN_AIR && this.airTicks > 0) {
+                this._touchdown(N, H);
+                // Physics 2: an air-braked car (brake still held) soaks up the impact, no bounce.
+                if (brake && this.physics >= 2) this._softLanding(N);
+            }
         } else {
             if (this.drifting && wasAir > 25) { this.drifting = false; this.driftDir = 0; }
             // A car lying on its roof or balanced on its belly is not flying: no air steering
             // or self-righting, which would only make it creep and spin in place.
-            if (this.bodyTicks === 0) this._airControl(h, wasAir);
+            if (this.bodyTicks === 0) {
+                if (brake && this.physics >= 2) this._airBrake(h, collision);
+                else this._airControl(h, wasAir);
+            }
         }
 
         // Aerodynamic drag.
@@ -606,13 +651,26 @@ export class Car {
         target += ((align * vl) / (vPlane > vMin ? vPlane : vMin)) * (vPlane < vFade ? vPlane / vFade : 1);
 
         let latG = G;
+        let speedDrift = false;
         if (this.drifting) {
             // Hold a slip angle set by the steering; the heading leads the velocity into the turn.
             const d = this.driftDir;
             const slip = -datan2(vl, vf > 0.1 ? vf : 0.1) * d;
             const s = this.steer * d;   // > 0 steering into the drift
-            const want = s > 0 ? CAR.driftAngle + (CAR.driftAngleMax - CAR.driftAngle) * s : CAR.driftAngle * (1 + s * 2);
-            latG = G * CAR.driftGrip;
+            let want;
+            if (this.physics >= 2) {
+                // The tap breaks the tail loose: the velocity keeps its own line while the
+                // heading swings, and grip comes back progressively over the drift. Counter-
+                // steer eases the angle out (never flips it) and speeds that recovery up.
+                want = s > 0 ? CAR.driftAngle + (CAR.driftAngleMax - CAR.driftAngle) * s : CAR.driftAngle * (1 + s);
+                let r = this.driftTime / CAR.drift2GripRecover;
+                if (r > 1) r = 1;
+                latG = G * (CAR.drift2GripStart + (CAR.drift2GripEnd - CAR.drift2GripStart) * r);
+                speedDrift = slip >= CAR.speedDriftMin && slip <= CAR.speedDriftMax && vf > CAR.speedDriftMinSpeed;
+            } else {
+                want = s > 0 ? CAR.driftAngle + (CAR.driftAngleMax - CAR.driftAngle) * s : CAR.driftAngle * (1 + s * 2);
+                latG = G * CAR.driftGrip;
+            }
             const velTurn = latG / vRef;   // how fast the velocity direction can follow
             target = d * (velTurn + 4 * (want - slip));
             this._slip = slip;
@@ -640,6 +698,16 @@ export class Car {
         let dv = -vl;
         if (dv > maxDv) dv = maxDv; else if (dv < -maxDv) dv = -maxDv;
         vel[0] += R[0] * dv; vel[1] += R[1] * dv; vel[2] += R[2] * dv;
+        if (speedDrift) {
+            // Speed drift: the grip turns the velocity without scrubbing speed, plus a small push.
+            const vl2 = vl + dv;
+            const vp2 = Math.sqrt(vf * vf + vl2 * vl2);
+            if (vp2 > 1e-6) {
+                const k = (vPlane + CAR.speedDriftAccel * h * contactW) / vp2 - 1;
+                const df = vf * k, dl = vl2 * k;
+                vel[0] += H[0] * df + R[0] * dl; vel[1] += H[1] * df + R[1] * dl; vel[2] += H[2] * df + R[2] * dl;
+            }
+        }
         // The grip force acts below the CoM: a touch of body roll.
         const rt = dv * CAR.rollHeight;
         this._addTorque(H[0] * -rt, H[1] * -rt, H[2] * -rt);
@@ -679,6 +747,56 @@ export class Car {
         const wy = w[1];
         w[0] -= w[0] * d; w[2] -= w[2] * d;
         w[1] = wy;
+    }
+
+    /**
+     * Physics 2 air-brake (brake held in the air): the same yaw steering as
+     * _airControl, and pitch and roll swing straight toward the ground plane
+     * below (level when there is none within airBrakeRay), damped, so the car
+     * meets the deck flat on four wheels instead of nose or tail first.
+     */
+    _airBrake(h, collision) {
+        const w = this.angVel, up = this._up;
+        const target = -this.steer * CAR.airYawRate;
+        let k = CAR.airYawResp * h;
+        if (k > 1) k = 1;
+        w[1] += (target - w[1]) * k;
+        // The ground plane under the car (walls and steep faces do not count).
+        const T = this._tmp3, hit = this._hit;
+        T[0] = 0; T[1] = 1; T[2] = 0;
+        if (collision.raycast(this.pos, AXIS_DOWN, CAR.airBrakeRay, hit) && !hit.backface
+            && hit.surface !== WALL && hit.normal[1] >= WHEEL_MIN_DOT) {
+            T[0] = hit.normal[0]; T[1] = hit.normal[1]; T[2] = hit.normal[2];
+        }
+        // axis = up x T rotates up toward T (|axis| = sin of the tilt; full rate past 90°).
+        let cx = up[1] * T[2] - up[2] * T[1];
+        let cy = up[2] * T[0] - up[0] * T[2];
+        let cz = up[0] * T[1] - up[1] * T[0];
+        if (up[0] * T[0] + up[1] * T[1] + up[2] * T[2] < 0) {
+            const l = Math.sqrt(cx * cx + cy * cy + cz * cz);
+            if (l > 1e-9) { cx /= l; cy /= l; cz /= l; }
+        }
+        // Steer the pitch/roll rate (the spin about T is yaw, left to the steering).
+        const wt = w[0] * T[0] + w[1] * T[1] + w[2] * T[2];
+        let r = CAR.airBrakeResp * h;
+        if (r > 1) r = 1;
+        const L = CAR.airBrakeLevel;
+        w[0] += (cx * L - (w[0] - T[0] * wt)) * r;
+        w[1] += (cy * L - (w[1] - T[1] * wt)) * r;
+        w[2] += (cz * L - (w[2] - T[2] * wt)) * r;
+    }
+
+    /**
+     * Physics 2: the suspension swallows the landing. Velocity into the deck and
+     * the pitch/roll rate relative to it go to zero, so the springs never wind up
+     * and throw the car back into the air; speed along the deck is kept.
+     */
+    _softLanding(N) {
+        const vel = this.vel, w = this.angVel;
+        const vn = vel[0] * N[0] + vel[1] * N[1] + vel[2] * N[2];
+        if (vn < 0) { vel[0] -= N[0] * vn; vel[1] -= N[1] * vn; vel[2] -= N[2] * vn; }
+        const wn = w[0] * N[0] + w[1] * N[1] + w[2] * N[2];
+        w[0] = N[0] * wn; w[1] = N[1] * wn; w[2] = N[2] * wn;
     }
 
     /** First wheel contact after a flight: landing strength and nose-first speed loss. */
@@ -814,6 +932,8 @@ export class Car {
         this.gear = g;
         this.rpm = rpm;
         this.slipAngle = this._slip;
+        this.speedDrift = this.physics >= 2 && this.drifting && this.airTicks === 0
+            && this._slip >= CAR.speedDriftMin && this._slip <= CAR.speedDriftMax && this.forwardSpeed > CAR.speedDriftMinSpeed;
         const steerAngle = this.steer * steerAngleMax(this.forwardSpeed < 0 ? -this.forwardSpeed : this.forwardSpeed);
         const rv = this._tmp;
         for (let i = 0; i < 4; i++) {
@@ -874,6 +994,7 @@ export class Car {
         this._groundSurf = s.groundSurf;
         this._slip = s.slip;
         this.gasHeld = !!s.gas;
+        this.airBraking = false;
         const e = this.effects, se = s.effects;
         e.turbo = se.turbo; e.turboTime = se.turboTime; e.noEngine = !!se.noEngine; e.noSteer = !!se.noSteer;
         e.noBrake = !!se.noBrake; e.slowmo = se.slowmo; e.cruise = !!se.cruise; e.cruiseSpeed = se.cruiseSpeed;
@@ -918,7 +1039,7 @@ export function carStateFrom(s) {
     };
 }
 
-const AXIS_FWD = [0, 0, 1], AXIS_UP = [0, 1, 0];
+const AXIS_FWD = [0, 0, 1], AXIS_UP = [0, 1, 0], AXIS_DOWN = [0, -1, 0];
 const GEARS = [0, 45, 90, 140, 190, 245];   // km/h where each synthetic gear starts
 
 export { WHEEL_MOUNTS, SPHERES };

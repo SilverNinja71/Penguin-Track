@@ -2,7 +2,7 @@
 // deterministically, with a timeline scrubber backed by savestates every
 // second, playback speeds 0.25x-4x and chase / orbit / free / cockpit cameras.
 import { Sim } from '../core/sim.js';
-import { replayInputs, snapshotCar, lerpCarSnapshot } from '../core/replay.js';
+import { replayInputs, replayPhysics, snapshotCar, lerpCarSnapshot } from '../core/replay.js';
 import { formatTime } from '../core/format.js';
 import { h, setText, toggleClass, niceDate } from './dom.js';
 import { iconSvg } from './icons.js';
@@ -43,7 +43,7 @@ export class ReplaySession {
         }
         this.inputs = replayInputs(replay);
         const laps = Number.isInteger(replay.laps) && replay.laps > 0 ? replay.laps : world.laps;
-        const sim = new Sim(world, { laps });
+        const sim = new Sim(world, { laps, physics: replayPhysics(replay) });
         this.sim = sim;
         this.states = [];
         this.markers = [];

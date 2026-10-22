@@ -5,6 +5,7 @@
 // (js/tas/quick.js) the player can drop, rewind to and cycle through. Finished
 // runs go to the track's Pure, TAS or AI leaderboard (records.js).
 import { Sim } from '../core/sim.js';
+import { PHYSICS_LATEST } from '../core/car.js';
 import { Recorder, snapshotCar, lerpCarSnapshot } from '../core/replay.js';
 import { Autopilot } from '../core/autopilot.js';
 import { formatTime } from '../core/format.js';
@@ -55,7 +56,8 @@ export class RaceSession {
         const r = app.renderer;
         app.loadWorld(world, track);
         this.car = r.addCar({ kind: 'player' });
-        this.sim = new Sim(world);
+        // New runs use the latest handling; the recorder stores the version with the replay.
+        this.sim = new Sim(world, { physics: PHYSICS_LATEST });
         this.recorder = new Recorder();
         this.pilot = app.debug.autopilot ? new Autopilot(world) : null;
         this.qt = this.quick && !this.pilot ? new QuickTas(this.sim, this.recorder) : null;

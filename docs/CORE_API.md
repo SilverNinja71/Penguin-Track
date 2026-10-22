@@ -602,7 +602,7 @@ yellow), checkpoint markers, pillars, gates, spawn and decor, and sets
 
 ```js
 import { Sim, hashState, canonicalState } from './core/sim.js';
-const sim = new Sim(world, { laps, allowNoSpawn });   // laps defaults to world.laps; tick 0 = the instant of "GO"
+const sim = new Sim(world, { laps, allowNoSpawn, physics });   // laps defaults to world.laps; tick 0 = the instant of "GO"
 sim.step({ steer, gas, brake, respawn? });            // advance one 10 ms tick
 sim.lastInput                                         // what that tick simulated (record this)
 ```
@@ -611,6 +611,15 @@ The constructor throws on configurations that can never finish: a lap count that
 positive integer, `laps > 1` on a track without a StartFinish line, or a world without a
 spawn (pass `allowNoSpawn: true` for synthetic test worlds; the car then starts at the
 origin).
+
+**Physics versions** (`car.js`: `PHYSICS_LEGACY = 1`, `PHYSICS_LATEST = 2`). `physics`
+picks the rule set and defaults to 1, the rules every run without a version was recorded
+with (replays, author runs, TAS scripts, savestates). Live play (`race.js`, `mp/racer.js`
+`ROOM_PHYSICS`) passes `PHYSICS_LATEST`. Physics 1 code paths are frozen bit-for-bit;
+physics 2 adds the Trackmania-style handling (below) and mid-air checkpoints:
+an airborne car entering the column `CHECKPOINT_AIR_HEIGHT` (24 m) above a checkpoint's
+trigger box (same footprint) takes it. A physics 2 state carries `physics` and `insideAir`;
+`setState` refuses a state from another physics version. Unknown versions throw.
 
 | field | meaning |
 | --- | --- |
@@ -777,6 +786,16 @@ Useful exports: `CAR` (all tuning constants), `SURFACE_PARAMS`, `ENGINE_CURVE`, 
   come with the steering: holding the brake from a straight into the corner (more than
   0.15 s before the wheel passes 35 %) is ordinary trail braking and does not drift. Ice
   never brake-drifts (it slides anyway). `car.drifting` reports the state.
+- **Physics 2 drift**: starts from 40 km/h. Lateral grip drops to 0.7 at the tap (the velocity
+  keeps its own line while the nose swings) and recovers to 1.1 over 0.5 s of drift, so a held
+  drift turns tighter than grip driving (180 km/h, 1.5 s full lock: ~66° vs ~57°). Counter-
+  steer keeps the drift alive, eases the angle toward 0 (never flips it) and runs the recovery
+  up to 3× faster; centring without the brake ends it. **Speed drift**: a slip angle held in
+  16°–24° above 110 km/h turns the velocity without scrubbing speed plus 1.5 m/s² along it
+  (`car.speedDrift`); wider angles scrub as before. **Air-brake**: the brake in the air keeps
+  the air steering and swings pitch/roll toward the ground plane below (a 40 m ray; level when
+  none) (`car.airBraking`); still held at touchdown, the impact into the deck and the
+  pitch/roll rate are absorbed, so the car does not bounce.
 - **Air**: steering yaws up to 1.6 rad/s about world up; after 0.1 s of flight a gentle
   torque (easing in over 0.3 s) rights pitch/roll toward "level, nose partly along the flight
   path" and damps them, so most landings are on the wheels. Landing nose-first (car pitch
@@ -868,14 +887,15 @@ const rec = new Recorder();
 sim.step(input); rec.push(sim.lastInput);  // once per tick: exactly what the tick simulated
 rec.truncate(ticks); rec.clear(); rec.respawnTicks();
 const replay = rec.toReplay({ sim, name, date });   // or { world | trackId + trackHash, laps, timeMs, finished, ... }
-// { format: 1, trackId, trackHash, laps, inputs: '1:…', ticks, timeMs, finished, respawnTicks, date, name }
+// { format: 1, trackId, trackHash, laps, physics?, inputs: '1:…', ticks, timeMs, finished, respawnTicks, date, name }
+// physics is only written when it is not 1; replayPhysics(replay) reads it (1 when absent)
 encodeInputs(inputs) -> '1:<runs>'
 decodeInputs(text, { maxTicks = MAX_REPLAY_TICKS }) -> inputs     // throws on malformed or non-canonical text
 countInputs(text) -> ticks                                       // validates without expanding
 MAX_REPLAY_TICKS                                                 // 360000: one hour
-simulateReplay(world, replay, { sampleEvery = 1, stopAtFinish = true, laps, maxTicks, onTick })
+simulateReplay(world, replay, { sampleEvery = 1, stopAtFinish = true, laps, physics, maxTicks, onTick })
     -> { finished, timeMs, ticks, respawns, respawnTicks, checkpointTimes, lapTimes, samples, sim }
-verifyReplay(world, replay, { requireFinish = true }) -> { ok, reason, finished, timeMs, respawns }
+verifyReplay(world, replay, { requireFinish = true, physics }) -> { ok, reason, finished, timeMs, respawns }
 ghostPoseAt(samples, fractionalTick, out?) -> { pos, quat, speedKmh, wheels? }   // interpolated ghost pose
 snapshotCar(car, out?) ; lerpCarSnapshot(a, b, alpha, out?)                     // renderer helpers (§10)
 ```
