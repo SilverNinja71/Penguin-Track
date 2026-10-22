@@ -1,7 +1,7 @@
 /* Multiplayer: hub, hot-seat, split-screen and online rooms (js/mp).
    Builds on the tokens and .pt-* components in style.css. */
 
-.mp-screen { gap: 14px; background: linear-gradient(180deg, rgba(6, 18, 40, 0.35), rgba(6, 18, 40, 0.75)); }
+.mp-screen { gap: 14px; background: rgba(7, 19, 38, 0.66); }
 .mp-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .mp-head .pt-title { margin-right: 6px; }
 .mp-head-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; }
@@ -9,7 +9,8 @@
 .mp-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .mp-tab { justify-content: flex-start; padding: 10px 14px 8px; text-align: left; }
 .mp-tab .pt-ico { color: var(--accent); }
-.mp-tab.active { background: rgba(127, 220, 255, 0.18); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.mp-tab.active .pt-ico { color: var(--accent-2); }
+.mp-tab.active { --btn-bg: var(--panel-3); --btn-line: var(--accent); }
 .mp-tab-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .mp-tab-label { font-size: 17px; }
 .mp-tab-blurb { font-size: 12.5px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -58,7 +59,7 @@
 .mp-table th { font-size: 13px; color: var(--muted); font-weight: 800; }
 .mp-table tr + tr td { border-top: 1px solid var(--line); }
 .mp-table td:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; font-weight: 700; }
-.mp-table tr.me td { background: rgba(127, 220, 255, 0.12); }
+.mp-table tr.me td { background: var(--panel-3); }
 .mp-table tr.win td { color: var(--gold); }
 .mp-table.big { font-size: 17px; }
 .mp-place { width: 28px; font: 800 15px var(--mono); color: var(--accent); }
@@ -91,10 +92,11 @@
 .mp-podium-step { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .mp-podium-names { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 26px; justify-content: flex-end; }
 .mp-podium-name { font-weight: 800; font-size: 17px; display: flex; align-items: center; max-width: 100%; }
-.mp-podium-block { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 12px 12px 4px 4px; border: 1px solid var(--line-strong); background: linear-gradient(180deg, rgba(220, 240, 255, 0.28), rgba(150, 200, 240, 0.1)); }
-.mp-podium-step.p1 .mp-podium-block { height: 110px; border-color: var(--gold); background: linear-gradient(180deg, rgba(255, 213, 74, 0.45), rgba(255, 213, 74, 0.08)); }
-.mp-podium-step.p2 .mp-podium-block { height: 82px; border-color: var(--silver); }
-.mp-podium-step.p3 .mp-podium-block { height: 62px; border-color: var(--bronze); background: linear-gradient(180deg, rgba(224, 160, 112, 0.4), rgba(224, 160, 112, 0.06)); }
+/* Solid layered steps: a coloured cap band over the block, a hard drop below. */
+.mp-podium-block { --cap: var(--line-strong); width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px 10px 4px 4px; border: var(--border) solid var(--cap); background: var(--panel-2); box-shadow: inset 0 10px 0 var(--cap), 0 5px 0 var(--btn-shadow); padding-top: 8px; }
+.mp-podium-step.p1 .mp-podium-block { --cap: var(--gold); height: 110px; background: #3a2f10; }
+.mp-podium-step.p2 .mp-podium-block { --cap: var(--silver); height: 82px; background: #26364a; }
+.mp-podium-step.p3 .mp-podium-block { --cap: var(--bronze); height: 62px; background: #3a2618; }
 .mp-podium-step.empty .mp-podium-block { visibility: hidden; }
 .mp-podium-n { font-size: 30px; font-weight: 800; line-height: 1; }
 .mp-podium-pts { font-size: 13px; color: var(--accent-2); }
@@ -130,7 +132,7 @@
 
 .mp-split-pause, .mp-split-results, .mp-race-menu, .mp-race-end {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
-    background: rgba(4, 12, 28, 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); pointer-events: auto; z-index: 2;
+    background: rgba(4, 12, 28, 0.7); pointer-events: auto; z-index: 2;
 }
 .mp-split-pause.pt-hidden, .mp-split-results.pt-hidden, .mp-race-menu.pt-hidden, .mp-race-end.pt-hidden { display: none; }
 .mp-split-pause-panel { width: min(360px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 22px; }
@@ -171,7 +173,7 @@
 .mp-clock.low { color: var(--warn); }
 .mp-lb-rows { display: flex; flex-direction: column; gap: 2px; }
 .mp-lb-row { display: grid; grid-template-columns: 20px 1fr auto 16px; gap: 6px; align-items: center; font-size: 14.5px; padding: 1px 4px; border-radius: 7px; }
-.mp-lb-row.me { background: rgba(127, 220, 255, 0.18); }
+.mp-lb-row.me { background: var(--panel-3); }
 .mp-lb-place { font: 800 13px var(--mono); color: var(--accent); }
 .mp-lb-name { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mp-lb-row.driving .mp-lb-name::after { content: " ●"; color: var(--good); font-size: 10px; vertical-align: 2px; }
@@ -220,14 +222,14 @@
 .mp-pod-name { font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-pod-time { font-size: 14px; display: flex; align-items: center; gap: 6px; }
 .mp-pod-step { width: 100%; display: grid; place-items: center; font-size: 28px; font-weight: 900; border-radius: 10px 10px 4px 4px; color: #0b1a33; }
-.mp-pod.p1 .mp-pod-step { height: 86px; background: linear-gradient(#ffe68a, #f2b62b); }
-.mp-pod.p2 .mp-pod-step { height: 62px; background: linear-gradient(#f1f6fb, #b9c6d6); }
-.mp-pod.p3 .mp-pod-step { height: 44px; background: linear-gradient(#f3c79d, #c4834d); }
+.mp-pod.p1 .mp-pod-step { height: 86px; background: var(--gold); box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.18); }
+.mp-pod.p2 .mp-pod-step { height: 62px; background: var(--silver); box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.18); }
+.mp-pod.p3 .mp-pod-step { height: 44px; background: var(--bronze); box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.18); }
 .mp-pod.me .mp-pod-name { color: var(--accent); }
 .mp-vote { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .mp-vote:empty { display: none; }
 .mp-vote-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
 .mp-vote-btn { justify-content: space-between; gap: 8px; text-align: left; font-size: 14px; min-width: 0; padding-left: 10px; padding-right: 8px; }
 .mp-vote-name { min-width: 0; white-space: normal; line-height: 1.15; }
-.mp-vote-btn.on { outline: 3px solid var(--accent); background: rgba(127, 220, 255, 0.18); }
+.mp-vote-btn.on { --btn-bg: var(--panel-3); --btn-line: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
 .mp-vote-n { min-width: 26px; text-align: center; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); }

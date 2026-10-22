@@ -8,6 +8,8 @@ import { iconSvg } from '../game/icons.js';
 import { keyLabel } from '../game/settings.js';
 import { moveFocus, modalOpen } from '../game/ui.js';
 import { leaderboardPanel } from '../game/leaderboard.js';
+import { hasProTAS } from '../services/entitlements.js';
+import { openPaywall } from '../game/paywall.js';
 
 export const TAS_MODES = ['quick', 'pro'];
 
@@ -22,9 +24,10 @@ export function getTasMode(storage) {
     return TAS_MODES.includes(m) ? m : 'quick';
 }
 
-/** Remembers `mode` and opens it (the Pro Studio reopens the project that was open). */
-export function switchTasMode(app, mode) {
+/** Remembers `mode` and opens it (the Pro Studio reopens the project that was open; it needs Pro TAS). */
+export async function switchTasMode(app, mode) {
     if (!TAS_MODES.includes(mode)) return;
+    if (mode === 'pro' && !hasProTAS() && !(await openPaywall(app, 'pro_tas'))) return;
     app.storage.set('tasMode', mode);
     app.goto('tas', mode === 'pro' ? { pro: true } : { quick: true });
 }
@@ -41,7 +44,7 @@ export function tasModeToggle(app, current) {
             e.stopPropagation();
             switchTasMode(app, current === 'quick' ? 'pro' : 'quick');
         },
-    }, h('b', label), h('small', sub));
+    }, h('b', label, mode === 'pro' && !hasProTAS() ? h('span.pro-lock', { title: 'Needs Pro TAS' }, 'PRO') : null), h('small', sub));
     return h('div.tas-mode', { role: 'radiogroup', 'aria-label': 'TAS mode' },
         opt('quick', 'Quick TAS', 'Race & Rewind'),
         opt('pro', 'Pro TAS Studio', 'Frame by frame'));

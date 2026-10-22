@@ -1,0 +1,14 @@
+# Cloudflare Worker for Penguintrack payments (see docs/PAYMENTS_SETUP.md).
+# Deploy from this folder with: npx wrangler deploy
+name = "penguintrack-payments"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# Public settings (not secret). Secrets are added with `npx wrangler secret put NAME`:
+# STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, GOOGLE_SERVICE_ACCOUNT.
+[vars]
+# Your Firebase project ID (Firebase console → Project settings).
+FIREBASE_PROJECT_ID = "YOUR_PROJECT_ID"
+# Where Stripe may send players back to after paying, comma-separated; the first is
+# the default. The game may also call the server only from these sites.
+APP_URLS = "https://silverninja71.github.io/Penguin-Track/"

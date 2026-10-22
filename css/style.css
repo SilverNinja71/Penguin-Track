@@ -1,20 +1,31 @@
 /* Penguintrack design tokens and shared components.
    Module styles live in their own files (editor.css, tas.css, ai.css, mp.css)
-   and build on these tokens and classes. */
+   and build on these tokens and classes.
+
+   "Nordic Arcade": flat, solid surfaces with 1.5-2px borders and crisp offset
+   shadows (no blurry glows or glassy gradients). Buttons sit on a hard 4px
+   shadow and press down 3px onto it. Icebreaker Gold is the one loud colour. */
 
 :root {
-    --bg: #0a1830;
-    --bg-2: #10264a;
-    --panel: rgba(12, 30, 60, 0.82);
-    --panel-solid: #12284d;
-    --panel-2: rgba(22, 48, 88, 0.9);
-    --line: rgba(200, 230, 255, 0.18);
-    --line-strong: rgba(200, 230, 255, 0.36);
-    --text: #eef6ff;
-    --muted: #9db8d9;
-    --accent: #7fdcff;
-    --accent-2: #b8f1ff;
-    --accent-ink: #062039;
+    --bg: #071326;
+    --bg-2: #0b1b33;
+    --panel: #0e2240;
+    --panel-solid: #0e2240;
+    --panel-2: #14305a;
+    --panel-3: #1a3b6b;
+    --sunken: #081a33;
+    --line: #1d3b66;
+    --line-strong: #2b5287;
+    --text: #f0f6fc;
+    --muted: #8ea8c7;
+    --accent: #f5b738;
+    --accent-2: #ffd27a;
+    --accent-ink: #061224;
+    --accent-shadow: #a8740f;
+    --ice: #7fdcff;
+    --btn-shadow: #040c1a;
+    --border: 2px;
+    --focus: #f5b738;
     --warn: #ffcf5a;
     --bad: #ff6b81;
     --good: #6bffb0;
@@ -27,9 +38,9 @@
     --tier-blue: #5aa8ff;
     --tier-red: #ff5d6c;
     --tier-black: #2a2f45;
-    --radius: 14px;
-    --radius-sm: 9px;
-    --shadow: 0 12px 40px rgba(0, 8, 24, 0.45);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 6px 0 var(--btn-shadow);
     --font: "Baloo 2", "Trebuchet MS", sans-serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -75,19 +86,17 @@ html, body {
     overflow: hidden;
 }
 
-.pt-screen.dim { background: linear-gradient(180deg, rgba(6, 18, 40, 0.55), rgba(6, 18, 40, 0.85)); }
+.pt-screen.dim { background: rgba(7, 19, 38, 0.78); }
 /* #ui prefix: `#ui > *` would otherwise win and swallow the mouse meant for the 3D view. */
 #ui > .pt-screen.passthrough { pointer-events: none; }
 #ui > .pt-screen.passthrough > * { pointer-events: auto; }
 
 .pt-panel {
     background: var(--panel);
-    border: 1px solid var(--line);
+    border: var(--border) solid var(--line);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     padding: 16px 18px;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
 }
 
 .pt-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -105,7 +114,7 @@ html, body {
     font-weight: 800;
     letter-spacing: 0.5px;
     line-height: 1.05;
-    text-shadow: 0 3px 0 rgba(0, 20, 50, 0.5);
+    text-shadow: 0 3px 0 var(--btn-shadow);
 }
 
 .pt-subtitle { margin: 0; font-size: 20px; font-weight: 700; }
@@ -114,16 +123,24 @@ html, body {
 
 /* ---------- Buttons ---------- */
 
+/* Flat, solid fill on a crisp 4px offset shadow; pressing moves the button
+   3px down onto a 1px shadow, like an arcade key. */
 .pt-btn {
+    --btn-bg: var(--panel-2);
+    --btn-bg-hover: var(--panel-3);
+    --btn-line: var(--line-strong);
+    --btn-drop: var(--btn-shadow);
     appearance: none;
-    border: 1px solid var(--line-strong);
-    background: var(--panel-2);
+    border: var(--border) solid var(--btn-line);
+    background: var(--btn-bg);
     color: var(--text);
     font: 700 16px/1 var(--font);
+    min-height: 44px;
     padding: 11px 18px 9px;
     border-radius: var(--radius-sm);
+    box-shadow: 0 4px 0 var(--btn-drop);
     cursor: pointer;
-    transition: transform 0.08s, background 0.12s, border-color 0.12s, box-shadow 0.12s;
+    transition: transform 0.06s, background-color 0.12s, border-color 0.12s, box-shadow 0.06s;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -131,25 +148,36 @@ html, body {
     white-space: nowrap;
 }
 
-.pt-btn:hover { border-color: var(--accent); background: rgba(40, 80, 130, 0.95); }
-.pt-btn:active { transform: translateY(1px) scale(0.99); }
-.pt-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.pt-btn:hover { background: var(--btn-bg-hover); border-color: var(--accent); }
+.pt-btn:active:not(:disabled), .pt-btn.pressed { transform: translateY(3px); box-shadow: 0 1px 0 var(--btn-drop); }
 .pt-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
 
 .pt-btn.primary {
-    background: linear-gradient(180deg, #a9ecff, #5cc8f5);
+    --btn-bg: var(--accent);
+    --btn-bg-hover: var(--accent-2);
+    --btn-line: var(--accent-2);
+    --btn-drop: var(--accent-shadow);
     color: var(--accent-ink);
-    border-color: #d6f6ff;
-    box-shadow: 0 4px 0 #2a7fa8, 0 8px 18px rgba(30, 140, 200, 0.35);
 }
 
-.pt-btn.primary:hover { background: linear-gradient(180deg, #c4f3ff, #74d4fb); }
-.pt-btn.ghost { background: transparent; }
-.pt-btn.danger { border-color: rgba(255, 107, 129, 0.6); color: #ffd0d8; }
-.pt-btn.danger:hover { background: rgba(120, 30, 50, 0.8); border-color: var(--bad); }
-.pt-btn.small { font-size: 14px; padding: 7px 11px 5px; }
+.pt-btn.primary:hover { border-color: #ffe2a6; }
+.pt-btn.ghost { --btn-bg: transparent; --btn-bg-hover: var(--panel-2); --btn-line: var(--line); box-shadow: none; }
+.pt-btn.ghost:active:not(:disabled) { box-shadow: none; }
+.pt-btn.danger { --btn-line: #8a3346; --btn-bg-hover: #4a1826; color: #ffd0d8; }
+.pt-btn.danger:hover { border-color: var(--bad); }
+.pt-btn.small { font-size: 14px; min-height: 36px; padding: 7px 11px 5px; }
 .pt-btn.big { font-size: 22px; padding: 16px 26px 13px; }
-.pt-btn.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pt-btn.active { --btn-bg: var(--panel-3); --btn-line: var(--accent); }
+
+/* One focus ring everywhere: a solid gold outline with a little air. */
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.pt-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+
+/* Touch screens: every tap target is at least 44px. */
+@media (pointer: coarse) {
+    .pt-btn, .pt-btn.small { min-height: 44px; }
+    .pt-btn.small { min-width: 44px; }
+}
 
 /* ---------- Forms ---------- */
 
@@ -161,15 +189,18 @@ html, body {
 .pt-input {
     font: 600 15px var(--font);
     color: var(--text);
-    background: rgba(4, 14, 32, 0.7);
-    border: 1px solid var(--line-strong);
+    background: var(--sunken);
+    border: var(--border) solid var(--line-strong);
     border-radius: var(--radius-sm);
     padding: 8px 10px;
+    min-height: 40px;
     outline: none;
 }
 
 .pt-field textarea, textarea.pt-input { font-family: var(--mono); font-size: 13px; line-height: 1.45; resize: vertical; }
 .pt-field input:focus, .pt-field select:focus, .pt-field textarea:focus, .pt-input:focus { border-color: var(--accent); }
+.pt-field input:focus-visible, .pt-field select:focus-visible, .pt-field textarea:focus-visible, .pt-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.pt-field input:disabled, .pt-field select:disabled { opacity: 0.55; cursor: not-allowed; }
 input[type="range"] { accent-color: var(--accent); }
 input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; }
 
@@ -183,8 +214,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
     font-weight: 700;
     padding: 3px 8px 1px;
     border-radius: 99px;
-    background: rgba(127, 220, 255, 0.14);
-    border: 1px solid rgba(127, 220, 255, 0.35);
+    background: #2a2410;
+    border: 1.5px solid #6b5216;
     color: var(--accent-2);
 }
 
@@ -193,15 +224,15 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    border: 2px solid rgba(0, 0, 0, 0.35);
-    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.25);
+    border: 2px solid rgba(0, 0, 0, 0.4);
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.22);
     vertical-align: middle;
 }
 
-.pt-medal.emperor { background: radial-gradient(circle at 35% 30%, #e6fbff, var(--emperor) 55%, #2a8fc0); }
-.pt-medal.gold { background: radial-gradient(circle at 35% 30%, #fff6c8, var(--gold) 55%, #c08a10); }
-.pt-medal.silver { background: radial-gradient(circle at 35% 30%, #ffffff, var(--silver) 55%, #8797a8); }
-.pt-medal.bronze { background: radial-gradient(circle at 35% 30%, #ffe2c4, var(--bronze) 55%, #8a5228); }
+.pt-medal.emperor { background: var(--emperor); }
+.pt-medal.gold { background: var(--gold); }
+.pt-medal.silver { background: var(--silver); }
+.pt-medal.bronze { background: var(--bronze); }
 .pt-medal.none { background: rgba(255, 255, 255, 0.08); box-shadow: none; border-style: dashed; border-color: var(--line-strong); }
 .pt-medal.big { width: 44px; height: 44px; border-width: 3px; }
 
@@ -210,9 +241,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
     min-width: 24px;
     padding: 2px 7px 0;
     border-radius: 6px;
-    border: 1px solid var(--line-strong);
+    border: 1.5px solid var(--line-strong);
     border-bottom-width: 3px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--panel-2);
     font: 700 13px/1.5 var(--mono);
     text-align: center;
 }
@@ -234,7 +265,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 
 .pt-toast {
     background: var(--panel-solid);
-    border: 1px solid var(--line-strong);
+    border: var(--border) solid var(--line-strong);
     border-radius: 99px;
     padding: 9px 18px 7px;
     font-weight: 700;
@@ -250,7 +281,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .pt-modal-back {
     position: fixed;
     inset: 0;
-    background: rgba(2, 10, 24, 0.6);
+    background: rgba(4, 10, 22, 0.72);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -263,3 +294,22 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- Pro paywall (js/game/paywall.js) ---------- */
+
+.pw-modal { max-width: min(500px, 100%); }
+.pw-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pw-badge { font-weight: 800; font-size: 13px; letter-spacing: 1px; padding: 4px 8px 2px; border-radius: 6px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 3px 0 var(--accent-shadow); }
+.pw-title { flex: 1; min-width: 0; font-size: 24px; }
+.pw-price { font-size: 26px; font-weight: 800; color: var(--accent); }
+.pw-price small { font-size: 13px; color: var(--muted); font-weight: 700; }
+.pw-reason { color: var(--accent-2); font-weight: 700; }
+.pw-list { list-style: none; margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: var(--sunken); border: var(--border) solid var(--line); border-radius: var(--radius-sm); }
+.pw-list li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.3; }
+.pw-list li .pt-ico { color: var(--good); margin-top: 1px; }
+.pw-free, .pw-fine, .pw-status { margin: 0; font-size: 13px; line-height: 1.4; }
+.pw-status:empty { display: none; }
+.pw-status.bad { color: #ffb3c0; }
+.pw-actions { display: flex; flex-direction: column; gap: 10px; }
+.pw-actions .pt-btn { width: 100%; }
+.pw-actions-2 { gap: 8px; }

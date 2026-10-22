@@ -81,7 +81,7 @@
 
 .ai-tab:hover { color: var(--text); }
 .ai-tab.active { color: var(--text); border-bottom-color: var(--accent); }
-.ai-tab:focus-visible { outline: 2px solid var(--accent-2); outline-offset: -3px; }
+.ai-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
 
 .ai-pane { flex: 1; min-height: 0; padding: 12px 14px; }
 .ai-left-foot { flex: none; display: flex; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
@@ -217,7 +217,7 @@
 .ai-policy { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px !important; }
 .ai-policy-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; flex-wrap: wrap; }
 .ai-policy-head b { font-size: 14.5px; }
-.ai-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dot, var(--gold)); align-self: center; box-shadow: 0 0 6px var(--dot, var(--gold)); }
+.ai-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dot, var(--gold)); align-self: center; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35); }
 .ai-policy-body { display: flex; gap: 14px; align-items: center; }
 
 .ai-actbox { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; gap: 2px 4px; }
@@ -341,3 +341,8 @@
         overflow-y: auto;
     }
 }
+
+/* ---------- Free Lab note (lab-pro.js) ---------- */
+.ai-pro-note { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 10px; border-radius: var(--radius-sm); background: #2a2410; border: 1.5px solid #6b5216; font-size: 12.5px; line-height: 1.35; color: var(--accent-2); }
+.ai-pro-note .pt-ico { color: var(--accent); }
+.ai-pro-text { flex: 1; min-width: 0; }

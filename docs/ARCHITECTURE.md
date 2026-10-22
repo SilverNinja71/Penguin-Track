@@ -34,6 +34,15 @@ penguintrack/
   favicon.svg
   vendor/                  three.module.min.js, three.core.min.js, addons/   [do not edit]
   js/main.js               bootstrap, App object, screen router               [shell]
+  js/services/             accounts and payments (no game logic)              [shell]
+    config.js              Firebase web config (placeholders), products, PRO_GATING, hub account URL
+    firebase.js            lazy Firebase SDK: Auth (anonymous + Google), Firestore, Functions
+    entitlements.js        hasProTAS() / hasProAI(), offline cache, dev flag (?pro=dev|locked|off)
+    payments.js            startCheckout(), listenToEntitlements(), the ?payment= return toast
+  worker/                  payments server, a Cloudflare Worker: POST /checkout (Stripe Checkout,
+                           Firebase ID token required), POST /webhook (signature-checked, writes
+                           Firestore entitlements as a service account); no dependencies
+  firestore.rules          players read their own users/{uid}; only the webhook writes
   js/core/                 deterministic simulation                           [core]
     constants.js           units, tick rate, limits
     mathd.js               deterministic math (dsin/dcos/datan2/…), vec3/quat helpers
@@ -284,9 +293,23 @@ All keys are prefixed `penguintrack:`. Values are JSON.
 | `tas` | saved TAS projects `{ [name]: { trackId, script, notes } }` |
 | `ai` | saved AI models `{ [name]: { trackId, arch, weights, stats } }` |
 
-The shared site account (`../Empire/shared/accounts.js`, `window.GameAccounts`) is optional:
-when a player is signed in, first-time medals add gold to the shared profile
-(`spear_mace_user_profile.gold`) — Emperor 60, Gold 30, Silver 15, Bronze 5.
+Accounts (`js/game/account.js`) have two optional sources and fall back to a guest:
+
+- The hub's shared site account (`SITE_ACCOUNTS_URL` in `js/services/config.js`, by default
+  `../Empire/shared/accounts.js`, `window.GameAccounts`) is loaded on demand at startup, so the
+  game no longer needs the Empire repo next to it. When a player is signed in there, first-time
+  medals add gold to the shared profile (`spear_mace_user_profile.gold`) — Emperor 60, Gold 30,
+  Silver 15, Bronze 5. The hub's script and keys are unchanged, so the other games are unaffected.
+- Firebase (`js/services/firebase.js`) gives a `uid` (anonymous or Google) that Pro purchases
+  belong to. It only loads once `FIREBASE_CONFIG` holds a real project.
+
+Pro tiers ($3 each, $5 bundle): Quick TAS stays free; the Pro TAS Studio (timeline, bruteforce,
+savestate slots, opening replays in the Studio) needs `hasProTAS()`. The free AI Lab trains with
+the presets for 5 generations on 1 worker; `hasProAI()` lifts that (16 workers, custom network,
+rays and mutation, weight import / export; `js/ai/lab-pro.js`). Nothing is locked until Firebase
+is configured (`PRO_GATING = 'auto'`). Firestore `users/{uid}.entitlements`, written only by the
+payments server's Stripe webhook (`worker/`), is the source of truth; the localStorage copy
+(`penguintrack:entitlements`) is an offline cache anyone could edit. Setup: `docs/PAYMENTS_SETUP.md`.
 
 ## Controls (Trackmania defaults)
 
@@ -322,13 +345,19 @@ when a player is signed in, first-time medals add gold to the shared profile
 
 ## Design tokens (`css/style.css`)
 
+"Nordic Arcade": flat solid surfaces, 1.5–2px borders, crisp offset shadows (no glows or glassy
+gradients). Buttons rest on `box-shadow: 0 4px 0 var(--btn-shadow)` and press to `translateY(3px)`
+on a 1px shadow; one focus ring (`outline: 2px solid #f5b738; outline-offset: 3px`); 44px tap targets.
+
 ```css
---bg: #0a1830; --bg-2: #10264a; --panel: rgba(12, 30, 60, 0.82); --panel-solid: #12284d;
---line: rgba(200, 230, 255, 0.18); --text: #eef6ff; --muted: #9db8d9; --accent: #7fdcff;
---accent-2: #b8f1ff; --warn: #ffcf5a; --bad: #ff6b81; --good: #6bffb0;
+--bg: #071326; --bg-2: #0b1b33; --panel: #0e2240; --panel-solid: #0e2240; --panel-2: #14305a;
+--panel-3: #1a3b6b; --sunken: #081a33; --line: #1d3b66; --line-strong: #2b5287;
+--text: #f0f6fc; --muted: #8ea8c7; --accent: #f5b738 (Icebreaker Gold); --accent-2: #ffd27a;
+--accent-ink: #061224; --accent-shadow: #a8740f; --btn-shadow: #040c1a; --border: 2px; --ice: #7fdcff;
+--warn: #ffcf5a; --bad: #ff6b81; --good: #6bffb0;
 --emperor: #6fd3ff; --gold: #ffd54a; --silver: #d7e3ef; --bronze: #e0a070;
 --tier-white: #f4f9ff; --tier-green: #5fd88a; --tier-blue: #5aa8ff; --tier-red: #ff5d6c; --tier-black: #2a2f45;
---radius: 14px; --font: "Baloo 2", "Trebuchet MS", sans-serif; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+--radius: 12px; --radius-sm: 8px; --shadow: 0 6px 0 var(--btn-shadow); --font: "Baloo 2", "Trebuchet MS", sans-serif; --mono: ui-monospace, "SF Mono", Menlo, monospace;
 ```
 Shared classes: `.pt-screen` (full overlay), `.pt-panel`, `.pt-btn` (+ `.primary`, `.ghost`,
 `.danger`, `.small`), `.pt-title`, `.pt-grid`, `.pt-row`, `.pt-field`, `.pt-tag`, `.pt-medal`

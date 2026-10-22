@@ -29,3 +29,12 @@ venv/
 *.log
 test_*.js
 scratch/
+
+# Payments server (Cloudflare Worker): dependencies, build cache, local secrets
+worker/node_modules/
+.wrangler/
+.dev.vars
+*.local
+# A Google service account key must never be committed
+*service-account*.json
+*firebase-adminsdk*.json

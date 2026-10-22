@@ -13,7 +13,9 @@ import { NullRenderer, NullAudio, hardenRenderer, hardenAudio } from './game/stu
 import { Backdrop } from './game/backdrop.js';
 import { h, isTypingTarget, loadModuleCss } from './game/dom.js';
 import { iconSvg } from './game/icons.js';
-import { currentAccount } from './game/account.js';
+import { currentAccount, identity, initAccounts } from './game/account.js';
+import { readDevFlag } from './services/entitlements.js';
+import { initPayments } from './services/payments.js';
 import menu from './game/menu.js';
 import campaign from './game/campaign.js';
 import play from './game/play.js';
@@ -82,6 +84,10 @@ class App {
     }
 
     async init() {
+        // Accounts load alongside the 3D engine: the hub's site account if it is
+        // there, Firebase (purchases) once config.js is filled in.
+        readDevFlag();
+        const accounts = initAccounts().catch((e) => console.warn('[penguintrack] accounts:', e && e.message));
         this.controls.attach(window);
         this.controls.mountTouch(document.body);
         this.loop.onError = () => {
@@ -122,8 +128,9 @@ class App {
         document.addEventListener('keydown', (e) => this._onKey(e));
         // Browsers only start audio after a gesture; this keeps trying until one counts.
         this.audio.autoUnlock(window);
+        // A tactile click on every press (tabs and switches included).
         document.addEventListener('click', (e) => {
-            const b = e.target.closest && e.target.closest('button, a.pt-btn');
+            const b = e.target.closest && e.target.closest('button, a.pt-btn, [role="tab"], [role="switch"], summary');
             if (b && !b.disabled) this.audio.ui(b.dataset.sound || 'click');
         }, true);
         this.controls.onDevice = (d) => document.documentElement.setAttribute('data-input', d);
@@ -136,6 +143,8 @@ class App {
             boot.classList.add('out');
             setTimeout(() => boot.remove(), 400);
         }
+        await accounts;
+        initPayments(this);
         await this._start();
         if (!this.webgl) this._noWebGL();
     }
@@ -282,6 +291,11 @@ class App {
 
     account() {
         return currentAccount();
+    }
+
+    /** { name, uid, provider, site, firebase }: see game/account.js. */
+    identity() {
+        return identity();
     }
 
     // ------------------------------------------------------------- input
