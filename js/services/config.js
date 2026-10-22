@@ -45,3 +45,10 @@ export const PRO_GATING = 'auto';
  * Optional: the game plays as a guest when it is missing. null skips it.
  */
 export const SITE_ACCOUNTS_URL = '../Empire/shared/accounts.js';
+
+/**
+ * Where the menu's "Support" button goes (opens in a new tab); null hides it.
+ * Set it to 'https://github.com/sponsors/SilverNinja71' once GitHub approves
+ * the Sponsors profile (until then that address only shows the GitHub profile).
+ */
+export const SUPPORT_URL = null;

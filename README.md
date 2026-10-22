@@ -129,6 +129,17 @@ Quick TAS and the AI Lab's presets are free. Two optional one-time unlocks ($3 e
 
 Payments use Firebase (accounts, free plan), Stripe Checkout and a small Cloudflare Worker (`worker/`, free plan) that talks to Stripe. Until `js/services/config.js` holds a real Firebase project, nothing is locked. Setting it up: [docs/PAYMENTS_SETUP.md](docs/PAYMENTS_SETUP.md). On a local dev server, add `?pro=dev` to the address to unlock everything, `?pro=locked` to try the paywall, `?pro=off` to go back to normal.
 
+## Support the game
+
+Penguintrack is free. If you enjoy it, you can support it on [GitHub Sponsors](https://github.com/sponsors/SilverNinja71).
+
+To switch on the menu's **Support** button (for the repo owner):
+
+1. Go to https://github.com/sponsors, choose to get sponsored as yourself, fill in the profile, and add the bank and tax details GitHub asks for (payouts go to a bank account, so GitHub may need an adult as the account holder; its form says what's required). GitHub reviews the profile before it goes live.
+2. Once https://github.com/sponsors/SilverNinja71 shows your Sponsors page, set `SUPPORT_URL` in `js/services/config.js` to that address, then commit and push.
+
+`.github/FUNDING.yml` also puts a **Sponsor** button on this repo's GitHub page once the profile is live.
+
 ## For developers
 
 ```sh

@@ -30,6 +30,7 @@ const PATHS = {
     ghost: '<path d="M4.5 20.5V11a7.5 7.5 0 0 1 15 0v9.5l-2.5-2-2.5 2-2.5-2-2.5 2-2.5-2z"/><circle cx="9.5" cy="10.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="14.5" cy="10.5" r="1.4" fill="currentColor" stroke="none"/>',
     camera: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.3"/>',
     home: '<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>',
+    heart: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20z"/>',
     snowflake: '<path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/><path d="M9.5 3.5L12 5.5l2.5-2M9.5 20.5L12 18.5l2.5 2M3 10.2l3.2-.6-1-3M21 13.8l-3.2.6 1 3M3 13.8l3.2.6-1 3M21 10.2l-3.2-.6 1-3"/>',
     penguin: '<path d="M12 3c-3.5 0-6 3-6 7v5c0 3.3 2.7 6 6 6s6-2.7 6-6v-5c0-4-2.5-7-6-7z"/><path d="M12 9c-2 0-3.2 1.6-3.2 3.6v2.4a3.2 3.2 0 0 0 6.4 0v-2.4C15.2 10.6 14 9 12 9z" fill="currentColor" opacity="0.35"/><path d="M10.6 8.6l1.4 1.2 1.4-1.2"/>',
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
