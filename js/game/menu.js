@@ -4,6 +4,7 @@ import { h } from './dom.js';
 import { icon, iconSvg, penguinSvg } from './icons.js';
 import { currentAccount, accountsAvailable, identity, onIdentityChange } from './account.js';
 import { firebaseConfigured, signInWithGoogle } from '../services/firebase.js';
+import { SUPPORT_URL } from '../services/config.js';
 
 const ITEMS = [
     { id: 'editor', label: 'Editor', icon: 'edit', hint: 'Build a track' },
@@ -89,6 +90,9 @@ const menu = {
             snowfall(),
             h('div.menu-top',
                 h('a.pt-btn.small.ghost.menu-site', { href: '../Empire/', 'data-sound': 'back' }, icon('home', 18), 'All games'),
+                SUPPORT_URL ? h('a.pt-btn.small.menu-support', {
+                    href: SUPPORT_URL, target: '_blank', rel: 'noopener', title: 'Support Penguintrack on GitHub Sponsors (opens a new tab)',
+                }, icon('heart', 18), 'Support') : null,
                 h('div.pt-spacer'),
                 this.chip = accountChip(app)),
             h('div.menu-main',

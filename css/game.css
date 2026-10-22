@@ -160,6 +160,7 @@ a.pt-btn { text-decoration: none; }
 .menu-screen > .pt-snowfall { position: absolute; z-index: 0; }
 .menu-top { display: flex; align-items: center; gap: 10px; }
 .menu-site { color: var(--muted); }
+.menu-support .pt-ico { color: #ff7aa8; }
 
 .menu-account { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 99px; }
 .menu-avatar {
