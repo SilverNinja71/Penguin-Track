@@ -1,8 +1,8 @@
 // Which Pro features this player owns: hasProTAS() / hasProAI().
 //
 // The real source of truth is the Firestore document users/{uid}, whose
-// `entitlements` map only the stripeWebhook Cloud Function writes (security
-// rules forbid players from writing it). payments.js listens to it and calls
+// `entitlements` map only the payments server's Stripe webhook writes
+// (worker/; security rules forbid players from writing it). payments.js listens to it and calls
 // setEntitlements(). A copy is cached in localStorage so Pro keeps working
 // offline; anyone can edit that copy, which is fine for a single-player tool
 // but means nothing server-side should ever trust it.

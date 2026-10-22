@@ -1,29 +1,44 @@
 // Buying Pro with Stripe Checkout. The flow:
-//   1. startCheckout(item) asks the createStripeCheckoutSession Cloud Function
-//      (signed in: anonymously if need be) for a Checkout page and goes there.
-//   2. Stripe takes the payment and calls the stripeWebhook Cloud Function,
-//      which writes users/{uid}.entitlements[item] = true in Firestore.
+//   1. startCheckout(item) signs the player in (anonymously if need be) and
+//      asks the payments server (worker/, a Cloudflare Worker at
+//      PAYMENTS_API_URL) for a Checkout page, proving who they are with their
+//      Firebase ID token, then goes there.
+//   2. Stripe takes the payment and calls the server's /webhook, which writes
+//      users/{uid}.entitlements[item] = true in Firestore.
 //   3. Stripe sends the player back here with ?payment=success&item=…; the
 //      game shows a toast and tidies the address. listenToEntitlements() sees
 //      the Firestore change and the feature unlocks without a reload.
 // No Stripe keys live in the game: the secret key and webhook secret are only
-// in the Cloud Functions' secret storage.
-import { PRODUCTS } from './config.js';
+// secrets of the payments server.
+import { PRODUCTS, PAYMENTS_API_URL } from './config.js';
 import { firebaseConfigured, initFirebase, ensureUser, onUserChanged } from './firebase.js';
 import { setEntitlements, applyCachedEntitlements, onEntitlementsChange, PRO_FEATURES } from './entitlements.js';
+
+/** True once config.js holds the payments server's real address. */
+export function paymentsServerConfigured(url = PAYMENTS_API_URL) {
+    return typeof url === 'string' && url.startsWith('https://') && !url.includes('YOUR_');
+}
 
 /** Sends the player to Stripe Checkout for `item` ('pro_tas', 'pro_ai' or 'pro_bundle'). */
 export async function startCheckout(item) {
     if (!PRODUCTS[item]) throw new Error(`Unknown item ${item}`);
-    if (!firebaseConfigured()) throw new Error('Payments are not set up on this copy of the game yet.');
-    const fb = await initFirebase();
-    if (!fb) throw new Error('Could not reach the payment server. Check your connection and try again.');
-    await ensureUser();
-    const call = fb.sdk.functions.httpsCallable(fb.functions, 'createStripeCheckoutSession');
-    const res = await call({ item, returnUrl: location.origin + location.pathname });
-    const url = res && res.data && res.data.url;
-    if (typeof url !== 'string' || !url.startsWith('https://checkout.stripe.com/')) throw new Error('Checkout did not start. Please try again.');
-    location.assign(url);
+    if (!firebaseConfigured() || !paymentsServerConfigured()) throw new Error('Payments are not set up on this copy of the game yet.');
+    const user = await ensureUser();
+    const token = await user.getIdToken();
+    let res;
+    try {
+        res = await fetch(`${PAYMENTS_API_URL.replace(/\/+$/, '')}/checkout`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ item, returnUrl: location.origin + location.pathname }),
+        });
+    } catch (e) {
+        throw new Error('Could not reach the payment server. Check your connection and try again.');
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Checkout did not start. Please try again.');
+    if (typeof data.url !== 'string' || !data.url.startsWith('https://checkout.stripe.com/')) throw new Error('Checkout did not start. Please try again.');
+    location.assign(data.url);
 }
 
 /**

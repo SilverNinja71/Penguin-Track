@@ -1,0 +1,13 @@
+{
+  "name": "penguintrack-payments",
+  "description": "Cloudflare Worker for Penguintrack Pro purchases (Stripe Checkout + webhook, Firestore entitlements)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "logs": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

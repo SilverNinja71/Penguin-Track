@@ -10,7 +10,7 @@ import {
     hasProTAS, hasProAI, gatingActive, readDevFlag, devFlag, isDevHost, setEntitlements, applyCachedEntitlements,
     normalizeEntitlements, onEntitlementsChange, FREE_AI,
 } from '../../js/services/entitlements.js';
-import { readPaymentReturn, stripPaymentQuery } from '../../js/services/payments.js';
+import { readPaymentReturn, stripPaymentQuery, paymentsServerConfigured } from '../../js/services/payments.js';
 import { aiGoalCap, aiWorkerCap, atFreeLimit, AI_PRO_SETTINGS } from '../../js/ai/lab-pro.js';
 
 /** Runs fn as if the page were at `href` with an empty localStorage; puts the globals back after. */
@@ -38,6 +38,9 @@ test('pro: the placeholder Firebase config counts as not set up', () => {
     assert.equal(firebaseConfigured({ apiKey: 'AIzaReal', projectId: 'penguin-track', appId: '1:2:web:3' }), true);
     assert.equal(firebaseConfigured({ apiKey: 'AIzaReal', projectId: 'YOUR_PROJECT_ID', appId: '1:2:web:3' }), false);
     assert.equal(firebaseConfigured(null), false);
+    assert.equal(paymentsServerConfigured(), false, 'placeholder Worker address');
+    assert.equal(paymentsServerConfigured('https://penguintrack-payments.silverninja.workers.dev'), true);
+    assert.equal(paymentsServerConfigured('http://insecure.example'), false);
 });
 
 test('pro: nothing is locked until Firebase is set up (PRO_GATING auto)', () => {

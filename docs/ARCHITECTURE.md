@@ -39,7 +39,9 @@ penguintrack/
     firebase.js            lazy Firebase SDK: Auth (anonymous + Google), Firestore, Functions
     entitlements.js        hasProTAS() / hasProAI(), offline cache, dev flag (?pro=dev|locked|off)
     payments.js            startCheckout(), listenToEntitlements(), the ?payment= return toast
-  functions/               Cloud Functions: createStripeCheckoutSession, stripeWebhook (Node 20)
+  worker/                  payments server, a Cloudflare Worker: POST /checkout (Stripe Checkout,
+                           Firebase ID token required), POST /webhook (signature-checked, writes
+                           Firestore entitlements as a service account); no dependencies
   firestore.rules          players read their own users/{uid}; only the webhook writes
   js/core/                 deterministic simulation                           [core]
     constants.js           units, tick rate, limits
@@ -306,7 +308,7 @@ savestate slots, opening replays in the Studio) needs `hasProTAS()`. The free AI
 the presets for 5 generations on 1 worker; `hasProAI()` lifts that (16 workers, custom network,
 rays and mutation, weight import / export; `js/ai/lab-pro.js`). Nothing is locked until Firebase
 is configured (`PRO_GATING = 'auto'`). Firestore `users/{uid}.entitlements`, written only by the
-`stripeWebhook` Cloud Function, is the source of truth; the localStorage copy
+payments server's Stripe webhook (`worker/`), is the source of truth; the localStorage copy
 (`penguintrack:entitlements`) is an offline cache anyone could edit. Setup: `docs/PAYMENTS_SETUP.md`.
 
 ## Controls (Trackmania defaults)

@@ -30,9 +30,11 @@ venv/
 test_*.js
 scratch/
 
-# Firebase (Cloud Functions dependencies, local emulator/debug files, secrets)
-functions/node_modules/
-.firebase/
-firebase-debug*.log
+# Payments server (Cloudflare Worker): dependencies, build cache, local secrets
+worker/node_modules/
+.wrangler/
+.dev.vars
 *.local
-.runtimeconfig.json
+# A Google service account key must never be committed
+*service-account*.json
+*firebase-adminsdk*.json

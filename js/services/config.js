@@ -1,8 +1,8 @@
 // Settings for accounts and payments. Everything here is safe to publish:
 // a Firebase web config only names the project (Firestore security rules and
-// the Cloud Functions decide what anyone may do). The Stripe secret key and
-// webhook secret never belong in this file or anywhere in the game: they live
-// in Firebase Secret Manager and only the Cloud Functions read them.
+// the payments server decide what anyone may do). The Stripe secret key and
+// webhook secret never belong in this file or anywhere in the game: they are
+// secrets of the payments server (worker/, a Cloudflare Worker) and only it reads them.
 // docs/PAYMENTS_SETUP.md walks through filling this in.
 
 /** Paste the web app config from Firebase console → Project settings → Your apps. */
@@ -18,13 +18,12 @@ export const FIREBASE_CONFIG = {
 /** Firebase JS SDK version, loaded from gstatic.com only once the config above is filled in. */
 export const FIREBASE_SDK_VERSION = '10.14.1';
 
-/** Region the Cloud Functions are deployed to (functions/index.js uses the same). */
-export const FUNCTIONS_REGION = 'us-central1';
+/** The payments server (worker/): its address after `npx wrangler deploy`, no trailing slash. */
+export const PAYMENTS_API_URL = 'https://penguintrack-payments.YOUR_SUBDOMAIN.workers.dev';
 
 /**
  * Pro products. `grants` lists the entitlements a purchase turns on; prices are
- * only shown here, the real amount is set by the createStripeCheckoutSession
- * Cloud Function.
+ * only shown here, the real amount is set by the payments server (worker/src/index.js).
  */
 export const PRODUCTS = Object.freeze({
     pro_tas: { name: 'Pro TAS', price: '$3', grants: ['pro_tas'] },

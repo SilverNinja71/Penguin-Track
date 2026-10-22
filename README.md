@@ -127,7 +127,7 @@ Quick TAS and the AI Lab's presets are free. Two optional one-time unlocks ($3 e
 - **Pro TAS**: the frame-by-frame TAS Studio, its bruteforce optimiser, savestate slots and opening any replay in the Studio.
 - **Pro AI**: unlimited generations (free: 5), up to 16 training workers (free: 1), custom sensor rays and hidden layers, mutation settings, and driver weight import / export.
 
-Payments use Firebase (accounts) and Stripe Checkout. Until `js/services/config.js` holds a real Firebase project, nothing is locked. Setting it up: [docs/PAYMENTS_SETUP.md](docs/PAYMENTS_SETUP.md). On a local dev server, add `?pro=dev` to the address to unlock everything, `?pro=locked` to try the paywall, `?pro=off` to go back to normal.
+Payments use Firebase (accounts, free plan), Stripe Checkout and a small Cloudflare Worker (`worker/`, free plan) that talks to Stripe. Until `js/services/config.js` holds a real Firebase project, nothing is locked. Setting it up: [docs/PAYMENTS_SETUP.md](docs/PAYMENTS_SETUP.md). On a local dev server, add `?pro=dev` to the address to unlock everything, `?pro=locked` to try the paywall, `?pro=off` to go back to normal.
 
 ## For developers
 

@@ -1,8 +1,8 @@
 // Firebase for accounts and purchases: Auth (anonymous and Google) and
-// Firestore. The SDK is only fetched (from gstatic.com) once config.js holds
+// Firestore, both on the free Spark plan. The SDK is only fetched (from gstatic.com) once config.js holds
 // a real project; until then everything here quietly reports "not configured"
 // and the game plays exactly as before, as a guest.
-import { FIREBASE_CONFIG, FIREBASE_SDK_VERSION, FUNCTIONS_REGION } from './config.js';
+import { FIREBASE_CONFIG, FIREBASE_SDK_VERSION } from './config.js';
 
 /** True once config.js holds a real Firebase project (not the YOUR_… placeholders). */
 export function firebaseConfigured(cfg = FIREBASE_CONFIG) {
@@ -13,7 +13,7 @@ export function firebaseConfigured(cfg = FIREBASE_CONFIG) {
 let ready = null;
 
 /**
- * Loads and starts Firebase once. Resolves { app, auth, db, functions, sdk }
+ * Loads and starts Firebase once. Resolves { app, auth, db, sdk }
  * or null (not configured, offline, or blocked). A failed load is retried on
  * the next call.
  */
@@ -31,13 +31,12 @@ export function initFirebase() {
 
 async function load() {
     const base = `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/`;
-    const [appSdk, authSdk, storeSdk, fnSdk] = await Promise.all(
-        ['firebase-app.js', 'firebase-auth.js', 'firebase-firestore.js', 'firebase-functions.js'].map((f) => import(base + f)));
+    const [appSdk, authSdk, storeSdk] = await Promise.all(
+        ['firebase-app.js', 'firebase-auth.js', 'firebase-firestore.js'].map((f) => import(base + f)));
     const app = appSdk.initializeApp(FIREBASE_CONFIG);
     const auth = authSdk.getAuth(app);
     const db = storeSdk.getFirestore(app);
-    const functions = fnSdk.getFunctions(app, FUNCTIONS_REGION);
-    const fb = { app, auth, db, functions, sdk: { auth: authSdk, firestore: storeSdk, functions: fnSdk } };
+    const fb = { app, auth, db, sdk: { auth: authSdk, firestore: storeSdk } };
     // Finishes a Google sign-in that went through a full-page redirect.
     try {
         await authSdk.getRedirectResult(auth);
