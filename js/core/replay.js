@@ -2,8 +2,10 @@
 // encoding, and deterministic re-simulation for ghosts and verification.
 //
 // A replay object:
-//   { format: 1, trackId, trackHash, laps, inputs: '<encoded>', ticks, timeMs,
-//     respawnTicks: [...], finished, date, name }
+//   { format: 1, trackId, trackHash, laps, physics?, inputs: '<encoded>', ticks,
+//     timeMs, respawnTicks: [...], finished, date, name }
+// `physics` (car.js PHYSICS_*) is only written for runs after physics 1, so
+// older replays are byte-identical and simulate with the rules they were made with.
 //
 // Encoding (version prefix "1:"): runs joined by '.', each run is
 //   <flags><steer>[*<count in base36>]
@@ -17,7 +19,7 @@ import { STEER_MAX } from './constants.js';
 import { clampInput } from './input.js';
 import { Sim } from './sim.js';
 import { TWO_PI } from './mathd.js';
-import { CAR } from './car.js';
+import { CAR, PHYSICS_LEGACY, PHYSICS_VERSIONS } from './car.js';
 
 export const REPLAY_FORMAT = 1;
 /** Longest replay decodeInputs / simulateReplay accept by default: one hour of ticks. */
@@ -159,18 +161,20 @@ export class Recorder {
 
     /**
      * Builds a replay object. meta: { sim | world (or trackId + trackHash), laps,
-     * timeMs, finished, name, date }. With `sim`, the world, lap count, finish
-     * flag and time default to the sim's.
+     * physics, timeMs, finished, name, date }. With `sim`, the world, lap count,
+     * physics, finish flag and time default to the sim's.
      */
     toReplay(meta = {}) {
         const sim = meta.sim || null;
         const world = meta.world || (sim ? sim.world : null);
         const finished = meta.finished ?? (sim ? sim.finished : false);
+        const physics = meta.physics ?? (sim ? sim.physics : PHYSICS_LEGACY);
         return {
             format: REPLAY_FORMAT,
             trackId: meta.trackId ?? (world && world.track ? world.track.id : null),
             trackHash: meta.trackHash ?? (world ? world.hash ?? null : null),
             laps: meta.laps ?? (sim ? sim.laps : world ? world.laps ?? 1 : 1),
+            ...(physics !== PHYSICS_LEGACY ? { physics } : null),
             inputs: encodeInputs(this.inputs),
             ticks: this.inputs.length,
             timeMs: meta.timeMs ?? (sim && sim.finished ? sim.finishTimeMs : null),
@@ -208,10 +212,15 @@ function snapshot(sim, teleport) {
     };
 }
 
+/** The physics version a replay was recorded with (1 when it carries none). */
+export function replayPhysics(replay) {
+    return replay && replay.physics != null ? replay.physics : PHYSICS_LEGACY;
+}
+
 /**
  * Re-simulates a replay. opts: { sampleEvery = 1 (ticks; 0 = no samples),
  * stopAtFinish = true, laps (default: replay.laps, else the world's),
- * maxTicks = MAX_REPLAY_TICKS, onTick(sim, input) }.
+ * physics (default: the replay's), maxTicks = MAX_REPLAY_TICKS, onTick(sim, input) }.
  * Returns { finished, timeMs, ticks, respawns, respawnTicks, checkpointTimes,
  * lapTimes, samples, sim }. respawnTicks are the input indices whose tick began
  * with a respawn. samples hold { tick, pos, quat, vel, speedKmh, steer,
@@ -222,7 +231,8 @@ export function simulateReplay(world, replay, opts = {}) {
     const every = opts.sampleEvery ?? 1;
     const inputs = replayInputs(replay, opts);
     const laps = opts.laps ?? replay.laps ?? undefined;
-    const sim = new Sim(world, laps != null ? { laps } : {});
+    const physics = opts.physics ?? replayPhysics(replay);
+    const sim = new Sim(world, laps != null ? { laps, physics } : { physics });
     const samples = [];
     const respawnTicks = [];
     if (every > 0) samples.push(snapshot(sim, false));
@@ -257,18 +267,22 @@ export function simulateReplay(world, replay, opts = {}) {
  * what re-simulating it gives: track hash (required), tick count, finish flag,
  * time, and respawn ticks (up to the finish). opts.requireFinish (default
  * true) also rejects replays that do not finish, since records and ghosts are
- * finished runs. Returns { ok, reason, finished, timeMs, respawns }.
+ * finished runs. opts.physics overrides the replay's physics version (for
+ * replays whose version travelled out of band). Returns { ok, reason, finished,
+ * timeMs, respawns }.
  */
 export function verifyReplay(world, replay, opts = {}) {
     const fail = (reason, base = null) => ({ ok: false, reason, finished: base ? base.finished : false, timeMs: base ? base.timeMs : null, respawns: base ? base.respawns : 0 });
     if (!replay || typeof replay !== 'object') return fail('Not a replay');
     if (!replay.trackHash) return fail('Replay has no track hash');
     if (!world.hash || replay.trackHash !== world.hash) return fail('Replay was recorded on a different track layout');
+    const physics = opts.physics ?? replayPhysics(replay);
+    if (!PHYSICS_VERSIONS.includes(physics)) return fail(`Replay needs physics ${physics}, which this version of the game does not have`);
     let res, count;
     try {
         count = typeof replay.inputs === 'string' ? countInputs(replay.inputs) : replayInputs(replay).length;
         if (replay.ticks != null && replay.ticks !== count) return fail(`Replay says ${replay.ticks} ticks but holds ${count} inputs`);
-        res = simulateReplay(world, replay, { sampleEvery: 0 });
+        res = simulateReplay(world, replay, { sampleEvery: 0, physics });
     } catch (e) {
         return fail(e.message);
     }

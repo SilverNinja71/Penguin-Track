@@ -38,7 +38,9 @@ Without WebGL the menus still open, but you can't race.
 | pause | Esc / P | Start |
 
 You can remap every key in Settings. On phones and tablets, touch buttons appear while you race.
-To drift on snow or powder, tap the brake while steering hard above 70 km/h.
+To drift on snow or powder, tap the brake while steering hard above 40 km/h; a drift held at a
+moderate angle above 110 km/h keeps its speed (a speed drift). Hold the brake in the air to
+level the car for a clean landing.
 
 ## What's in it
 

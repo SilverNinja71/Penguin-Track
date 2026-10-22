@@ -8,7 +8,7 @@
 // autopilot bot, for testing.
 import { buildWorld } from '../core/track.js';
 import { encodeTrack, decodeTrack, trackHash } from '../core/codec.js';
-import { verifyReplay, lerpCarSnapshot } from '../core/replay.js';
+import { lerpCarSnapshot } from '../core/replay.js';
 import { Autopilot } from '../core/autopilot.js';
 import { formatTime } from '../core/format.js';
 import { h, setText, copyText } from '../game/dom.js';
@@ -18,7 +18,7 @@ import { CAMERAS } from '../game/settings.js';
 import { ico, trackSelect, findTrackItem, loadPrefs, savePrefs, field, typing } from './common.js';
 import { RoomHost, RoomClient, loopbackPair, PING_MS } from './room.js';
 import { parseRoomCode, cleanName, makeRoomCode, LIMITS } from './protocol.js';
-import { Racer, Countdown } from './racer.js';
+import { Racer, Countdown, verifyRoomReplay } from './racer.js';
 import { pointsFor } from './scoring.js';
 import { hostPeer, joinPeer } from './net.js';
 import { roomLink } from '../game/links.js';
@@ -106,7 +106,7 @@ class OnlineSession {
             // Re-simulate claimed runs a moment later, off the message handler.
             verify: (ref, replay) => new Promise((resolve) => setTimeout(() => {
                 try {
-                    resolve(verifyReplay(this.resolve(ref).world, replay));
+                    resolve(verifyRoomReplay(this.resolve(ref).world, replay));
                 } catch (e) {
                     resolve({ ok: false, reason: e.message });
                 }

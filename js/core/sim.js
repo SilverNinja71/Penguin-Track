@@ -4,19 +4,27 @@
 // same world and inputs give bit-identical states on every engine.
 import { TICK_MS, FALL_Y } from './constants.js';
 import { segmentAABB, pointInAABB } from './collision.js';
-import { Car, carStateFrom } from './car.js';
+import { Car, carStateFrom, PHYSICS_LEGACY, PHYSICS_VERSIONS } from './car.js';
 import { normalizeInto } from './input.js';
 
 const EMPTY = Object.freeze([]);
 const NEUTRAL_INPUT = Object.freeze({ steer: 0, gas: false, brake: false });
 export const STATE_VERSION = 2;
+/**
+ * Physics 2: a checkpoint also counts when an airborne car crosses the column
+ * this high above its trigger box (same footprint), so a jump over the arch on
+ * a shortcut takes it. Checkpoints themselves do not move.
+ */
+export const CHECKPOINT_AIR_HEIGHT = 24;
 
 export class Sim {
     /**
      * world: from buildWorld (or any object with collision, triggers, spawn,
      * checkpointCount, fallY). opts.laps overrides world.laps; opts.allowNoSpawn
      * lets synthetic worlds without a spawn start the car at the origin.
-     * Throws on configurations that can never finish.
+     * opts.physics picks the rule set (car.js PHYSICS_*): default 1, the rules
+     * every run without a version was recorded with; live play passes
+     * PHYSICS_LATEST. Throws on configurations that can never finish.
      */
     constructor(world, opts = {}) {
         this.world = world;
@@ -34,13 +42,21 @@ export class Sim {
         this.checkpointCount = world.checkpointCount || 0;
         this.fallY = world.fallY != null ? world.fallY : FALL_Y;
         this.spawn = world.spawn || { pos: [0, 0, 0], quat: [0, 0, 0, 1], dir: 0 };
-        this.car = new Car();
+        const physics = opts.physics ?? PHYSICS_LEGACY;
+        if (!PHYSICS_VERSIONS.includes(physics)) throw new Error(`Unknown physics version ${physics} (this game knows ${PHYSICS_VERSIONS.join(', ')})`);
+        this.physics = physics;
+        this.car = new Car(physics);
         this.events = EMPTY;
         // The input the last step actually simulated: normalised, `respawn` true when
         // the tick began with a respawn (flag or respawn()), neutral after the finish.
         // Recorders store this, so replays reproduce runs exactly. Reused every tick.
         this.lastInput = { steer: 0, gas: false, brake: false, respawn: false };
         this._inside = new Uint8Array(this.triggers.length);
+        // Physics 2: the air column above each checkpoint (null for other triggers) and whether
+        // the car's last segment touched it. Physics 1 never reads these.
+        this._air = this.triggers.map((t) => (physics >= 2 && t.type === 'checkpoint'
+            ? { min: [t.min[0], t.max[1], t.min[2]], max: [t.max[0], t.max[1] + CHECKPOINT_AIR_HEIGHT, t.max[2]] } : null));
+        this._insideAir = new Uint8Array(this.triggers.length);
         this._entered = [];
         this._enteredT = [];
         this._prev = [0, 0, 0];
@@ -161,23 +177,39 @@ export class Sim {
     _refreshInside() {
         const pos = this.car.pos;
         for (let i = 0; i < this.triggers.length; i++) this._inside[i] = pointInAABB(pos, this.triggers[i]) ? 1 : 0;
+        if (this.physics >= 2) {
+            for (let i = 0; i < this.triggers.length; i++) this._insideAir[i] = this._air[i] && pointInAABB(pos, this._air[i]) ? 1 : 0;
+        }
     }
 
-    /** Swept-segment trigger detection: a pad fires once per entry, in crossing order. */
+    /**
+     * Swept-segment trigger detection: a pad fires once per entry, in crossing
+     * order. The tick's whole path is tested, so no speed can skip a box.
+     * Physics 2 also fires a checkpoint when an airborne car enters its air column.
+     */
     _triggers(a, b) {
         const trg = this.triggers, inside = this._inside;
         const ent = this._entered, entT = this._enteredT;
+        const air = this.physics >= 2 ? this._air : null, insideAir = this._insideAir;
+        const flying = this.car.airTicks > 0;
         let m = 0;
         for (let i = 0; i < trg.length; i++) {
-            const t = segmentAABB(a, b, trg[i]);
+            let t = segmentAABB(a, b, trg[i]);
             const now = t >= 0 ? 1 : 0;
-            if (now && !inside[i]) {
+            let enter = now && !inside[i];
+            inside[i] = now;
+            if (air && air[i]) {
+                const ta = segmentAABB(a, b, air[i]);
+                const nowAir = ta >= 0 ? 1 : 0;
+                if (nowAir && !insideAir[i] && flying && (!enter || ta < t)) { enter = true; t = ta; }
+                insideAir[i] = nowAir;
+            }
+            if (enter) {
                 // Insertion by (t, index) keeps the order deterministic.
                 let k = m++;
                 while (k > 0 && entT[k - 1] > t) { ent[k] = ent[k - 1]; entT[k] = entT[k - 1]; k--; }
                 ent[k] = i; entT[k] = t;
             }
-            inside[i] = now;
         }
         for (let k = 0; k < m; k++) this._fire(trg[ent[k]]);
     }
@@ -252,6 +284,7 @@ export class Sim {
             world: this.worldHash,
             laps: this.laps,
             mode: this.mode,
+            ...(this.physics !== PHYSICS_LEGACY ? { physics: this.physics, insideAir: Array.from(this._insideAir) } : null),
             tick: this.tick,
             finished: this.finished,
             finishTimeMs: this.finishTimeMs,
@@ -278,6 +311,9 @@ export class Sim {
         if (s.laps !== this.laps || s.mode !== this.mode) {
             throw new Error(`This state was saved for ${s.laps} lap(s) in ${s.mode} mode; this Sim runs ${this.laps} in ${this.mode} mode`);
         }
+        if ((s.physics ?? PHYSICS_LEGACY) !== this.physics) {
+            throw new Error(`This state was saved with physics ${s.physics ?? PHYSICS_LEGACY}; this Sim runs physics ${this.physics}`);
+        }
         if (!Array.isArray(s.inside) || s.inside.length !== this.triggers.length || !Array.isArray(s.collected)
             || s.collected.length !== this.checkpointCount) {
             throw new Error("This state does not match the world's triggers");
@@ -296,6 +332,7 @@ export class Sim {
         this.lastCheckpoint = s.lastCheckpoint;
         this._pendingRespawn = !!s.pendingRespawn;
         for (let i = 0; i < this._inside.length; i++) this._inside[i] = s.inside[i] ? 1 : 0;
+        for (let i = 0; i < this._insideAir.length; i++) this._insideAir[i] = s.insideAir && s.insideAir[i] ? 1 : 0;
         this._cp = s.cp ? carStateFrom(s.cp) : null;
         this.car.setState(s.car);
         this.events = EMPTY;
@@ -319,6 +356,8 @@ export function canonicalState(s) {
         world: s.world ?? null,
         laps: s.laps,
         mode: s.mode,
+        ...((s.physics ?? PHYSICS_LEGACY) !== PHYSICS_LEGACY
+            ? { physics: s.physics, insideAir: (s.insideAir || []).map((x) => (x ? 1 : 0)) } : null),
         tick: s.tick,
         finished: !!s.finished,
         finishTimeMs: s.finishTimeMs ?? null,

@@ -23,10 +23,11 @@ const SURFACE_TEXT = {
 const SURFACE_SWATCH = { snow: '#eef4fb', powder: '#d8c7a5', ice: '#a8dcf5', ground: '#f7fbff' };
 
 const TIPS = [
-    ['Drift', 'Above 70 km/h on snow or powder, tap the brake while steering hard to start a drift. Release the brake and hold the wheel into the turn to keep it; centre the wheel to end it.'],
+    ['Drift', 'Above 40 km/h on snow or powder, tap the brake while steering hard: the tail breaks loose, then the tyres bite again. Hold the wheel into the turn to keep it, counter-steer to catch it, centre the wheel to end it.'],
+    ['Speed drift', 'Hold a drift at a moderate angle (not full lock) above 110 km/h and it keeps its speed instead of scrubbing it, with a little push on top.'],
     ['Respawn', 'Enter puts you back at the last checkpoint with the speed you had there, but the clock keeps running. Backspace restarts the whole run instantly.'],
     ['Loops', 'Keep the gas held all the way round. A loop only fails when you arrive slow and lift.'],
-    ['Jumps', 'Land straight: touching down nose-first throws away speed. Steering works a little in the air.'],
+    ['Jumps', 'Land straight: touching down nose-first throws away speed. Hold the brake in the air to level the car with the ground below, and keep it held as you touch down for a soft landing without a bounce. Steering works a little in the air.'],
     ['Banked turns', 'The low inside line is the fast one; at full speed you need the whole width.'],
     ['Ghosts', 'Your personal best runs alongside you as a ghost (G hides it). Splits at each checkpoint show blue when you are ahead, red when behind. In Settings or the pause menu you can also race the best TAS run (pink) and the best AI run (green) at the same time.'],
     ['Quick TAS', 'TAS → Quick TAS lets you race and rewind: C drops a savestate marker, R or Backspace jumps back to it, and [ ] step through your markers. The run lands on the Best TAS leaderboard, and Open in Pro Studio carries the inputs into the frame-by-frame editor.'],
