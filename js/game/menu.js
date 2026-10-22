@@ -2,7 +2,8 @@
 // game, the signed-in site account and a way back to the site launcher.
 import { h } from './dom.js';
 import { icon, iconSvg, penguinSvg } from './icons.js';
-import { currentAccount, accountsAvailable } from './account.js';
+import { currentAccount, accountsAvailable, identity, onIdentityChange } from './account.js';
+import { firebaseConfigured, signInWithGoogle } from '../services/firebase.js';
 
 const ITEMS = [
     { id: 'editor', label: 'Editor', icon: 'edit', hint: 'Build a track' },
@@ -39,18 +40,32 @@ export function logo() {
         h('div.pt-logo-word', h('span.pt-logo-a', { 'data-snow': 'PENGUIN' }, 'PENGUIN'), h('span.pt-logo-b', { 'data-snow': 'TRACK' }, 'TRACK')));
 }
 
-function accountChip() {
+function accountChip(app) {
     const acc = currentAccount();
     if (acc) {
         return h('div.menu-account.pt-panel', { title: 'Signed in with your site account' },
             h('span.menu-avatar', acc.username.slice(0, 1).toUpperCase()),
             h('div.menu-account-text', h('div.menu-account-name', acc.username), h('div.menu-account-gold', h('span.res-coin'), `${acc.gold} gold`)));
     }
+    const id = identity();
+    if (id.provider === 'google') {
+        return h('div.menu-account.pt-panel', { title: 'Signed in with Google' },
+            h('span.menu-avatar', (id.name || 'P').slice(0, 1).toUpperCase()),
+            h('div.menu-account-text', h('div.menu-account-name', id.name || 'Penguin'), h('div.menu-account-gold', 'Signed in with Google')));
+    }
+    // Firebase set up: offer Google sign-in (purchases follow the player to other devices).
+    const signIn = firebaseConfigured() ? h('button.pt-btn.small.menu-signin', {
+        type: 'button',
+        onclick: () => signInWithGoogle().catch((e) => {
+            if (e && e.code !== 'auth/popup-closed-by-user') app.toast(`Could not sign in: ${e.message || e}`, { kind: 'bad' });
+        }),
+    }, 'Sign in') : null;
     return h('div.menu-account.guest.pt-panel',
         h('span.menu-avatar', { html: iconSvg('penguin', 20) }),
         h('div.menu-account-text',
             h('div.menu-account-name', 'Playing as a guest'),
-            h('div.menu-account-gold', accountsAvailable() ? 'Sign in on the site to earn gold for medals' : 'Medals still count on this device')));
+            h('div.menu-account-gold', accountsAvailable() ? 'Sign in on the site to earn gold for medals' : 'Medals still count on this device')),
+        signIn);
 }
 
 const menu = {
@@ -75,7 +90,7 @@ const menu = {
             h('div.menu-top',
                 h('a.pt-btn.small.ghost.menu-site', { href: '../Empire/', 'data-sound': 'back' }, icon('home', 18), 'All games'),
                 h('div.pt-spacer'),
-                accountChip()),
+                this.chip = accountChip(app)),
             h('div.menu-main',
                 logo(),
                 h('p.menu-tag', 'Snowy time attack. Chase the Emperor medal.'),
@@ -85,10 +100,19 @@ const menu = {
                 h('div.pt-spacer'),
                 showing));
         app.ui.appendChild(this.el);
+        // A sign-in (or the hub's account script landing late) refreshes the chip.
+        this.offIdentity = onIdentityChange(() => {
+            const next = accountChip(app);
+            if (this.chip) this.chip.replaceWith(next);
+            this.chip = next;
+        });
         requestAnimationFrame(() => play.focus({ preventScroll: true }));
     },
 
     exit() {
+        if (this.offIdentity) this.offIdentity();
+        this.offIdentity = null;
+        this.chip = null;
         this.el = null;
     },
 };

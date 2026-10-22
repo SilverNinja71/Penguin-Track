@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Penguintrack: players may read their own users/{uid} document (the Pro
+// entitlements the game listens to) and nothing else. Nobody can write
+// through these rules: only the stripeWebhook Cloud Function (Admin SDK,
+// which skips the rules) records purchases. That is what makes the server's
+// entitlements the source of truth; the game's local copy is just a cache.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -16,6 +16,8 @@ import { modalOpen } from '../game/ui.js';
 import { GhostRun, makeCarView } from '../game/ghost.js';
 import { allRecords, listReplays, saveReplay, submitBoardRun } from '../game/records.js';
 import { QuickHub, tasModeToggle, getTasMode } from './quick-hub.js';
+import { hasProTAS } from '../services/entitlements.js';
+import { openPaywall } from '../game/paywall.js';
 import { encodeReplayCodeAsync, decodeReplayText } from '../game/replaycode.js';
 import { InputTimeline } from './timeline.js';
 import { parse, serialize, fromReplay, toReplay } from './script.js';
@@ -1403,7 +1405,15 @@ const studio = {
         await loadModuleCss('tas');
         app.setMusic(false);
         const pro = params.pro || params.track || params.project || params.resume;
-        const mode = pro ? 'pro' : params.quick ? 'quick' : getTasMode(app.storage);
+        let mode = pro ? 'pro' : params.quick ? 'quick' : getTasMode(app.storage);
+        if (mode === 'pro' && !hasProTAS()) {
+            // The Studio needs Pro TAS: asked for outright, offer it; remembered from before, quietly open Quick TAS.
+            const reason = params.replay ? 'Opening a replay in the Studio needs Pro TAS.' : 'The frame-by-frame Studio needs Pro TAS.';
+            if (!pro || !(await openPaywall(app, 'pro_tas', { reason }))) {
+                if (pro && params.onExit) return params.onExit();
+                mode = 'quick';
+            }
+        }
         if (mode === 'quick') {
             this.hub = new QuickHub(app);
             this.hub.open(params);

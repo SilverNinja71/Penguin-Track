@@ -14,7 +14,7 @@ the replays, the ghosts, the TAS tools and the AI training kit.
 Play online at https://silverninja71.github.io/Penguin-Track/.
 
 To run it locally, serve the folder that holds this repo, so the game sits at `/Penguin-Track/`.
-Clone the hub repo [`Empire`](https://github.com/SilverNinja71/Empire) next to it to get the shared site account (`../Empire/shared/accounts.js`) and the "All games" link:
+The game runs on its own (as a guest). Clone the hub repo [`Empire`](https://github.com/SilverNinja71/Empire) next to it if you also want the shared site account (`../Empire/shared/accounts.js`, loaded on demand) and the "All games" link:
 
 ```sh
 python3 ../Empire/server.py   # or, from the folder above this repo: python3 -m http.server 8080
@@ -119,6 +119,15 @@ AI Lab > Drivers > Import and pick the model `.json` (or a `.state.json` to keep
 Replays > Import code also takes a model file or any replay JSON, to watch or race its run.
 
 If `node` is not on your `PATH`, set `PENGUINTRACK_NODE=/path/to/node` for the Python side.
+
+## Pro features
+
+Quick TAS and the AI Lab's presets are free. Two optional one-time unlocks ($3 each, or $5 for both):
+
+- **Pro TAS**: the frame-by-frame TAS Studio, its bruteforce optimiser, savestate slots and opening any replay in the Studio.
+- **Pro AI**: unlimited generations (free: 5), up to 16 training workers (free: 1), custom sensor rays and hidden layers, mutation settings, and driver weight import / export.
+
+Payments use Firebase (accounts) and Stripe Checkout. Until `js/services/config.js` holds a real Firebase project, nothing is locked. Setting it up: [docs/PAYMENTS_SETUP.md](docs/PAYMENTS_SETUP.md). On a local dev server, add `?pro=dev` to the address to unlock everything, `?pro=locked` to try the paywall, `?pro=off` to go back to normal.
 
 ## For developers
 

@@ -22,6 +22,7 @@ import { FieldPlayback } from './lab-playback.js';
 import { drawChart } from './lab-chart.js';
 import { PolicyOverlay } from './lab-overlay.js';
 import { openHowItWorks } from './lab-help.js';
+import { FREE_AI, aiWorkerCap, aiGoalCap, atFreeLimit, requireProAI, mountAiProLock } from './lab-pro.js';
 
 const CAMS = [
     { id: 'chase', label: 'Chase' },
@@ -278,6 +279,7 @@ class Lab {
         u.trainBtn = btn('.primary', 'Train', 'play', () => this.primary(), { 'data-autofocus': true, title: 'Train / pause / resume (Space)' });
         u.stopBtn = btn('', 'Stop', 'close', () => this.secondary());
         u.workersNote = h('p.ai-note.pt-muted');
+        this.listeners.push(mountAiProLock(this.app, u.inputs, u.settingsBox, () => this.updateWorkersNote()));
         return h('div.ai-train',
             h('label.pt-field', h('span', 'Track'), u.trackSel),
             h('div.pt-field', h('span', 'Preset'), h('div.ai-seg', { role: 'group', 'aria-label': 'Preset' }, u.presetBtns)),
@@ -455,7 +457,7 @@ class Lab {
     workerCount() {
         const s = memo.settings;
         const hc = (navigator.hardwareConcurrency || 4) - 1;
-        return Math.max(1, Math.min(MAX_WORKERS, s.workers > 0 ? s.workers : hc));
+        return aiWorkerCap(Math.max(1, Math.min(MAX_WORKERS, s.workers > 0 ? s.workers : hc)));
     }
 
     updateWorkersNote() {
@@ -466,7 +468,8 @@ class Lab {
             arch = L.runConfig(memo.settings, this.world, this.startFromModel()).arch;
         } catch (e) { /* settings mid-edit */ }
         const net = arch ? `network ${L.archLabel(arch)} (${L.paramCountOf(arch).toLocaleString()} weights)` : '';
-        setText(u.workersNote, `${this.workerCount()} worker threads · ${net}`);
+        const n = this.workerCount();
+        setText(u.workersNote, `${n} worker thread${n === 1 ? '' : 's'} · ${net}`);
     }
 
     startFromModel() {
@@ -532,7 +535,7 @@ class Lab {
         }
         const trainer = new NeuroTrainer({ ...rc.trainer, evaluator: null });
         memo.run = {
-            trainer, rc, track: memo.trackRef, goal: rc.generations || 0, trainMs: 0,
+            trainer, rc, track: memo.trackRef, goal: aiGoalCap(rc.generations || 0), trainMs: 0,
             best: null, lastStats: null, pending: null, state: 'idle', name: from ? memo.driver.name : null,
         };
         this.renderChart();
@@ -542,9 +545,14 @@ class Lab {
     resume() {
         const run = memo.run;
         if (!run) return;
+        if (atFreeLimit(run.trainer.generation)) {
+            requireProAI(this.app, `The free Lab trains up to ${FREE_AI.generations} generations.`).then((ok) => { if (ok && !this.disposed) this.resume(); });
+            return;
+        }
         if (this.state === 'done' || (run.goal && run.trainer.generation >= run.goal)) {
             run.goal = run.trainer.generation + (memo.settings.generations || 50);
         }
+        run.goal = aiGoalCap(run.goal);
         if (this.state === 'paused' && this.pool) {
             this.setState('training');
             this.loop();
@@ -1071,6 +1079,7 @@ class Lab {
 
     async importDriver() {
         const app = this.app;
+        if (!(await requireProAI(app, 'Importing driver weights needs Pro AI.'))) return;
         const text = await app.prompt('Import a driver', {
             message: 'Paste or choose a model .json (from tools/train.mjs or the Lab), a tools/train.mjs .state.json to keep training, or a replay JSON / PTR code (for example from Python).',
             multiline: true, placeholder: '{"format":"penguintrack-ai-model", …}', ok: 'Import', file: '.json,.txt',
@@ -1191,7 +1200,8 @@ class Lab {
         if (file) this.download(file);
     }
 
-    download(file) {
+    async download(file) {
+        if (!(await requireProAI(this.app, 'Exporting driver weights needs Pro AI.'))) return;
         const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
         const a = h('a', { href: URL.createObjectURL(blob), download: `${String(file.name || 'driver').replace(/[^\w.-]+/g, '_')}.json` });
         document.body.appendChild(a);

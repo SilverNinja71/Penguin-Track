@@ -17,9 +17,9 @@
     flex-wrap: wrap;
     padding: 6px 10px;
     background: var(--panel);
-    border: 1px solid var(--line);
+    border: var(--border) solid var(--line);
     border-radius: var(--radius-sm);
-    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 0 var(--btn-shadow);
 }
 .tas-titles { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
 .tas-title { font-weight: 700; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32vw; }
@@ -173,7 +173,7 @@ details.tas-sec summary { cursor: pointer; }
 .tas-ln { padding-right: 6px; height: 18px; }
 .tas-ln[data-tick] { cursor: pointer; color: var(--muted); }
 .tas-ln[data-tick]:hover { color: var(--accent); }
-.tas-ln.now { background: rgba(127, 220, 255, 0.18); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+.tas-ln.now { background: var(--panel-3); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
 .tas-ln.error { background: rgba(255, 107, 129, 0.28); color: #fff; }
 .tas-ln.warn { background: rgba(255, 207, 90, 0.22); color: #fff; }
 .tas-code {
@@ -207,7 +207,8 @@ details.tas-sec summary { cursor: pointer; }
 .tas-live { color: var(--accent); }
 .tas-history { list-style: none; margin: 0; padding: 0 0 8px; font-size: 12px; max-height: 220px; flex: none !important; }
 .tas-history li { padding: 3px 12px; cursor: pointer; border-bottom: 1px solid rgba(200, 230, 255, 0.06); }
-.tas-history li:hover, .tas-history li:focus-visible { background: rgba(127, 220, 255, 0.1); outline: none; }
+.tas-history li:hover { background: var(--panel-2); }
+.tas-history li:focus-visible { background: var(--panel-2); outline: 2px solid var(--focus); outline-offset: -2px; }
 
 /* project */
 .tas-project { display: flex; flex-direction: column; }
@@ -235,16 +236,21 @@ details.tas-sec summary { cursor: pointer; }
 }
 
 /* ---------- mode switch: Quick TAS / Pro TAS Studio (quick-hub.js) ---------- */
-.tas-mode { display: inline-flex; padding: 3px; gap: 3px; border-radius: 999px; background: rgba(4, 14, 32, 0.55); border: 1px solid var(--line); }
+.tas-mode { display: inline-flex; padding: 4px; gap: 4px; border-radius: 12px; background: var(--sunken); border: var(--border) solid var(--line); }
 .tas-mode-opt {
-    display: flex; flex-direction: column; align-items: center; line-height: 1.05; gap: 1px;
-    padding: 4px 14px 3px; border: 0; border-radius: 999px; background: transparent; color: var(--muted);
-    font: inherit; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; gap: 1px;
+    min-height: 40px; padding: 4px 14px 3px; border: var(--border) solid transparent; border-radius: 8px; background: transparent; color: var(--muted);
+    font: inherit; cursor: pointer; transition: transform 0.06s, box-shadow 0.06s;
 }
-.tas-mode-opt b { font-size: 14px; }
+.tas-mode-opt b { font-size: 14px; display: inline-flex; align-items: center; gap: 5px; }
 .tas-mode-opt small { font-size: 11px; opacity: 0.85; }
-.tas-mode-opt:hover, .tas-mode-opt:focus-visible { color: var(--text); outline: none; box-shadow: inset 0 0 0 1px var(--line-strong); }
-.tas-mode-opt.active { background: var(--accent); color: var(--accent-ink); }
+.tas-mode-opt:hover { color: var(--text); background: var(--panel-2); border-color: var(--line-strong); }
+.tas-mode-opt:focus-visible { color: var(--text); outline: 2px solid var(--focus); outline-offset: 3px; }
+.tas-mode-opt.active { background: var(--accent); border-color: var(--accent-2); color: var(--accent-ink); box-shadow: 0 3px 0 var(--accent-shadow); }
+.tas-mode-opt:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-shadow); }
+.tas-mode-opt .pro-lock { font-size: 10px; padding: 1px 5px 0; border-radius: 5px; background: var(--accent); color: var(--accent-ink); font-weight: 800; letter-spacing: 0.5px; }
+.tas-mode-opt.active .pro-lock { background: var(--accent-ink); color: var(--accent); }
+@media (pointer: coarse) { .tas-mode-opt { min-height: 44px; } }
 .tas-top .tas-mode-opt { padding: 2px 10px 1px; }
 .tas-top .tas-mode-opt b { font-size: 12px; }
 .tas-top .tas-mode-opt small { font-size: 10px; }
@@ -258,7 +264,7 @@ details.tas-sec summary { cursor: pointer; }
 .qh-lead { margin: 0; font-size: 16px; line-height: 1.45; }
 .qh-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .qh-step { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: start; }
-.qh-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: rgba(127, 220, 255, 0.16); color: var(--accent); }
+.qh-num { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-weight: 800; background: var(--accent); color: var(--accent-ink); box-shadow: 0 3px 0 var(--accent-shadow); }
 .qh-step p { margin: 2px 0 4px; font-size: 14px; line-height: 1.35; }
 .qh-keys { display: flex; gap: 4px; flex-wrap: wrap; }
 .qh-note { margin: 0; font-size: 13px; line-height: 1.4; }
